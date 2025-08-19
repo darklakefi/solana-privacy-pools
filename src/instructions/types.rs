@@ -155,6 +155,171 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                     precommitment_hash,
                 })
             }
+            2 => {
+                // Withdraw instruction
+                if data.len() < 2 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                
+                let mut offset = 1;
+                
+                // Parse processooor pubkey (32 bytes)
+                if data.len() < offset + 32 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let processooor = Pubkey::from(
+                    <[u8; 32]>::try_from(&data[offset..offset + 32])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                );
+                offset += 32;
+                
+                // Parse withdrawal data length (4 bytes)
+                if data.len() < offset + 4 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let data_len = u32::from_le_bytes(
+                    <[u8; 4]>::try_from(&data[offset..offset + 4])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                ) as usize;
+                offset += 4;
+                
+                // Parse withdrawal data
+                if data.len() < offset + data_len {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let withdrawal_data_bytes = data[offset..offset + data_len].to_vec();
+                offset += data_len;
+                
+                let withdrawal_data = WithdrawalData {
+                    processooor,
+                    data: withdrawal_data_bytes,
+                };
+                
+                // Parse proof data
+                // proof_a: 64 bytes
+                if data.len() < offset + 64 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_a = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                
+                // proof_b: 128 bytes
+                if data.len() < offset + 128 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_b = <[u8; 128]>::try_from(&data[offset..offset + 128])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 128;
+                
+                // proof_c: 64 bytes
+                if data.len() < offset + 64 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_c = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                
+                // Parse public signals count (4 bytes)
+                if data.len() < offset + 4 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let signals_count = u32::from_le_bytes(
+                    <[u8; 4]>::try_from(&data[offset..offset + 4])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                ) as usize;
+                offset += 4;
+                
+                // Parse public signals (32 bytes each)
+                let mut public_signals = Vec::new();
+                for _ in 0..signals_count {
+                    if data.len() < offset + 32 {
+                        return Err(ProgramError::InvalidInstructionData);
+                    }
+                    let signal = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?;
+                    public_signals.push(signal);
+                    offset += 32;
+                }
+                
+                let proof_data = WithdrawProofData {
+                    proof_a,
+                    proof_b,
+                    proof_c,
+                    public_signals,
+                };
+                
+                Ok(PrivacyPoolInstruction::Withdraw {
+                    withdrawal_data,
+                    proof_data,
+                })
+            }
+            3 => {
+                // Ragequit instruction
+                if data.len() < 2 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                
+                let mut offset = 1;
+                
+                // Parse proof data
+                // proof_a: 64 bytes
+                if data.len() < offset + 64 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_a = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                
+                // proof_b: 128 bytes
+                if data.len() < offset + 128 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_b = <[u8; 128]>::try_from(&data[offset..offset + 128])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 128;
+                
+                // proof_c: 64 bytes
+                if data.len() < offset + 64 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let proof_c = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                
+                // Parse public signals count (4 bytes)
+                if data.len() < offset + 4 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let signals_count = u32::from_le_bytes(
+                    <[u8; 4]>::try_from(&data[offset..offset + 4])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                ) as usize;
+                offset += 4;
+                
+                // Parse public signals (32 bytes each)
+                let mut public_signals = Vec::new();
+                for _ in 0..signals_count {
+                    if data.len() < offset + 32 {
+                        return Err(ProgramError::InvalidInstructionData);
+                    }
+                    let signal = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?;
+                    public_signals.push(signal);
+                    offset += 32;
+                }
+                
+                let proof_data = RagequitProofData {
+                    proof_a,
+                    proof_b,
+                    proof_c,
+                    public_signals,
+                };
+                
+                Ok(PrivacyPoolInstruction::Ragequit {
+                    proof_data,
+                })
+            }
             4 => {
                 // WindDown instruction - no additional data needed
                 Ok(PrivacyPoolInstruction::WindDown)
