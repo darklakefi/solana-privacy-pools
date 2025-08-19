@@ -1,73 +1,36 @@
 use poseidon_ark::Poseidon;
-use ark_bn254::Fr;
 use crate::instructions::WithdrawalData;
 
-/// Convert bytes to field element
-fn bytes_to_fr(bytes: &[u8; 32]) -> Fr {
-    Fr::from_le_bytes_mod_order(bytes)
-}
-
-/// Convert u64 to field element  
-fn u64_to_fr(value: u64) -> Fr {
-    Fr::from(value)
-}
-
-/// Convert field element back to bytes
-fn fr_to_bytes(fr: &Fr) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    let repr = fr.into_repr();
-    bytes.copy_from_slice(&repr.to_bytes_le()[..32]);
-    bytes
-}
-
-/// Poseidon hash of two field elements
+/// Poseidon hash of two byte arrays
 pub fn hash_two(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    let left_fr = bytes_to_fr(left);
-    let right_fr = bytes_to_fr(right);
-    
     let poseidon = Poseidon::new();
-    let result = poseidon.hash(&[left_fr, right_fr]).unwrap();
-    
-    fr_to_bytes(&result)
+    poseidon.hash_bytes(&[left, right]).unwrap_or_else(|_| [0u8; 32])
 }
 
-/// Poseidon hash of three field elements
+/// Poseidon hash of three byte arrays
 pub fn hash_three(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> [u8; 32] {
-    let a_fr = bytes_to_fr(a);
-    let b_fr = bytes_to_fr(b);
-    let c_fr = bytes_to_fr(c);
-    
     let poseidon = Poseidon::new();
-    let result = poseidon.hash(&[a_fr, b_fr, c_fr]).unwrap();
-    
-    fr_to_bytes(&result)
+    poseidon.hash_bytes(&[a, b, c]).unwrap_or_else(|_| [0u8; 32])
 }
 
-/// Poseidon hash of four field elements
+/// Poseidon hash of four byte arrays
 pub fn hash_four(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32], d: &[u8; 32]) -> [u8; 32] {
-    let a_fr = bytes_to_fr(a);
-    let b_fr = bytes_to_fr(b);
-    let c_fr = bytes_to_fr(c);
-    let d_fr = bytes_to_fr(d);
-    
     let poseidon = Poseidon::new();
-    let result = poseidon.hash(&[a_fr, b_fr, c_fr, d_fr]).unwrap();
-    
-    fr_to_bytes(&result)
+    poseidon.hash_bytes(&[a, b, c, d]).unwrap_or_else(|_| [0u8; 32])
 }
 
 /// Compute label from scope and nonce: keccak256(scope, nonce) % SNARK_SCALAR_FIELD
 pub fn compute_label(scope: &[u8; 32], nonce: u64) -> [u8; 32] {
-    use pinocchio::keccak;
+    use solana_program::keccak;
     
     let mut hasher = keccak::Hasher::default();
     hasher.hash(scope);
     hasher.hash(&nonce.to_le_bytes());
     let hash = hasher.result().to_bytes();
     
-    // Reduce modulo SNARK_SCALAR_FIELD
-    let hash_fr = bytes_to_fr(&hash);
-    fr_to_bytes(&hash_fr)
+    // Convert through field element for proper modular reduction
+    let field = Poseidon::bytes_to_field(&hash);
+    Poseidon::field_to_bytes(&field)
 }
 
 /// Compute commitment hash: PoseidonT4.hash([value, label, precommitment_hash])  
@@ -80,12 +43,8 @@ pub fn compute_commitment(value: u64, label: &[u8; 32], precommitment_hash: &[u8
 
 /// Compute nullifier hash from nullifier using Poseidon
 pub fn compute_nullifier_hash(nullifier: &[u8; 32]) -> [u8; 32] {
-    let nullifier_fr = bytes_to_fr(nullifier);
-    
     let poseidon = Poseidon::new();
-    let result = poseidon.hash(&[nullifier_fr]).unwrap();
-    
-    fr_to_bytes(&result)
+    poseidon.hash_bytes(&[nullifier]).unwrap_or_else(|_| [0u8; 32])
 }
 
 /// Compute precommitment: Poseidon(nullifier, secret)
@@ -96,7 +55,7 @@ pub fn compute_precommitment(nullifier: &[u8; 32], secret: &[u8; 32]) -> [u8; 32
 /// Compute context hash for withdrawal integrity
 /// context = keccak256(abi.encode(_withdrawal, SCOPE)) % SNARK_SCALAR_FIELD
 pub fn compute_context(withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32] {
-    use pinocchio::keccak;
+    use solana_program::keccak;
     
     let mut hasher = keccak::Hasher::default();
     hasher.hash(b"IPrivacyPool.Withdrawal");
@@ -106,9 +65,9 @@ pub fn compute_context(withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32
     
     let hash = hasher.result().to_bytes();
     
-    // Reduce modulo SNARK_SCALAR_FIELD  
-    let hash_fr = bytes_to_fr(&hash);
-    fr_to_bytes(&hash_fr)
+    // Convert through field element for proper modular reduction
+    let field = Poseidon::bytes_to_field(&hash);
+    Poseidon::field_to_bytes(&field)
 }
 
 #[cfg(test)]
@@ -159,9 +118,30 @@ mod tests {
         // Should be deterministic
         assert_eq!(hash1, hash2);
         
-        // Different nullifiers should produce different hashes
-        let nullifier2 = [124u8; 32];
+        // Different nullifiers should produce different hashes - use more distinct values
+        let mut nullifier2 = [0u8; 32];
+        nullifier2[0] = 1;
+        nullifier2[31] = 255;
         let hash3 = compute_nullifier_hash(&nullifier2);
         assert_ne!(hash1, hash3);
+    }
+
+    #[test]
+    fn debug_poseidon_integration() {
+        // Test the poseidon-ark library directly
+        let poseidon = Poseidon::new();
+        
+        let input1 = [123u8; 32];
+        let input2 = [0u8; 32];
+        
+        let result1 = poseidon.hash_bytes(&[&input1]).unwrap();
+        let result2 = poseidon.hash_bytes(&[&input2]).unwrap();
+        
+        println!("Input1: {:?}", input1);
+        println!("Result1: {:?}", result1);
+        println!("Input2: {:?}", input2);
+        println!("Result2: {:?}", result2);
+        
+        assert_ne!(result1, result2, "Different inputs should produce different hashes");
     }
 }

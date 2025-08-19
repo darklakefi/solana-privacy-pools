@@ -130,7 +130,7 @@ pub fn initialize_pool(
     let serialized = pool_state.try_to_vec()?;
     pool_account.try_borrow_mut_data()?[..].copy_from_slice(&serialized);
     
-    msg!("Privacy pool initialized with authority: {}", entrypoint_authority);
+    msg!("Privacy pool initialized with authority: {:?}", entrypoint_authority);
     Ok(())
 }
 
@@ -197,7 +197,7 @@ pub fn withdraw(
     let asset_vault = &accounts[3];
     let processooor_token_account = &accounts[4];
     
-    if processooor_account.key != &withdrawal_data.processooor {
+    if processooor_account.key() != &withdrawal_data.processooor {
         msg!("Invalid processooor");
         return Err(ProgramError::InvalidArgument);
     }
@@ -240,7 +240,7 @@ pub fn withdraw(
     let pool_data = pool_state.try_to_vec()?;
     pool_account.try_borrow_mut_data()?[..].copy_from_slice(&pool_data);
     
-    msg!("Withdrawal processed: {} tokens to {}", 
+    msg!("Withdrawal processed: {} tokens to {:?}", 
          proof_data.withdrawn_value(), 
          withdrawal_data.processooor);
     Ok(())
@@ -283,7 +283,7 @@ pub fn ragequit(
     let nullifier_data = nullifier_state.try_to_vec()?;
     nullifier_account.try_borrow_mut_data()?[..].copy_from_slice(&nullifier_data);
     
-    msg!("Ragequit processed: {} tokens to {}", 
+    msg!("Ragequit processed: {} tokens to {:?}", 
          proof_data.value(), 
          ragequitter.key());
     Ok(())

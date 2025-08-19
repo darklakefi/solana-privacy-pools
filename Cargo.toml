@@ -6,11 +6,16 @@ edition = "2021"
 [dependencies]
 pinocchio = "0.6"
 groth16-solana = "0.0.1"
-poseidon-ark = { git = "https://github.com/darklakefi/poseidon-ark" }
+poseidon-ark = { path = "../poseidon-ark" }
 solana-program = "1.18"
+ark-bn254 = "0.4"
+ark-ff = "0.4"
 
 [lib]
 crate-type = ["cdylib", "lib"]
+
+[dev-dependencies]
+# Keep minimal for now
 
 [profile.release]
 lto = true

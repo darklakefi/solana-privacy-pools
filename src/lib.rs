@@ -13,6 +13,9 @@ mod instructions;
 mod merkle_tree;
 mod poseidon;
 
+#[cfg(test)]
+mod test_helpers;
+
 use crate::instructions::*;
 use crate::state::*;
 
@@ -92,14 +95,14 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 }
                 let mut offset = 1;
                 let entrypoint_authority = Pubkey::from(
-                    data[offset..offset + 32].try_into()
+                    <[u8; 32]>::try_from(&data[offset..offset + 32])
                         .map_err(|_| ProgramError::InvalidInstructionData)?
                 );
                 offset += 32;
                 let max_tree_depth = data[offset];
                 offset += 1;
                 let asset_mint = Pubkey::from(
-                    data[offset..offset + 32].try_into()
+                    <[u8; 32]>::try_from(&data[offset..offset + 32])
                         .map_err(|_| ProgramError::InvalidInstructionData)?
                 );
                 
@@ -116,7 +119,11 @@ impl BorshDeserialize for PrivacyPoolInstruction {
 
 /// Constants from the Solidity contract
 pub mod constants {
-    pub const SNARK_SCALAR_FIELD: u64 = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    // SNARK scalar field is too large for u64, represented as bytes
+    pub const SNARK_SCALAR_FIELD_BYTES: [u8; 32] = [
+        0x01, 0x00, 0x00, 0xf0, 0x93, 0xf5, 0xe1, 0x43, 0x91, 0x70, 0xb9, 0x79, 0x48, 0xe8, 0x33, 0x28,
+        0x5d, 0x58, 0x81, 0x81, 0xb6, 0x45, 0x50, 0xb8, 0x29, 0xa0, 0x31, 0xe1, 0x72, 0x4e, 0x64, 0x30,
+    ];
     pub const MAX_TREE_DEPTH: u8 = 32;
     pub const ROOT_HISTORY_SIZE: usize = 64;
 }

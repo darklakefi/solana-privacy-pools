@@ -4,6 +4,8 @@ use pinocchio::{
     pubkey::Pubkey,
 };
 
+use solana_program::keccak;
+
 use crate::{BorshSerialize, BorshDeserialize, constants::*};
 
 impl BorshSerialize for PrivacyPoolState {
@@ -36,23 +38,23 @@ impl BorshDeserialize for PrivacyPoolState {
         offset += 1;
         
         let entrypoint_authority = Pubkey::from(
-            data[offset..offset + 32].try_into()
+            <[u8; 32]>::try_from(&data[offset..offset + 32])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
         offset += 32;
         
         let asset_mint = Pubkey::from(
-            data[offset..offset + 32].try_into()
+            <[u8; 32]>::try_from(&data[offset..offset + 32])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
         offset += 32;
         
-        let scope: [u8; 32] = data[offset..offset + 32].try_into()
+        let scope: [u8; 32] = <[u8; 32]>::try_from(&data[offset..offset + 32])
             .map_err(|_| ProgramError::InvalidAccountData)?;
         offset += 32;
         
         let nonce = u64::from_le_bytes(
-            data[offset..offset + 8].try_into()
+            <[u8; 8]>::try_from(&data[offset..offset + 8])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
         offset += 8;
@@ -64,7 +66,7 @@ impl BorshDeserialize for PrivacyPoolState {
         offset += 1;
         
         let current_root_index = usize::from_le_bytes(
-            data[offset..offset + 8].try_into()
+            <[u8; 8]>::try_from(&data[offset..offset + 8])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
         offset += 8;
@@ -114,7 +116,7 @@ impl BorshDeserialize for MerkleTreeState {
     fn try_from_slice(data: &[u8]) -> Result<Self, ProgramError> {
         let mut offset = 0;
         
-        let root: [u8; 32] = data[offset..offset + 32].try_into()
+        let root: [u8; 32] = <[u8; 32]>::try_from(&data[offset..offset + 32])
             .map_err(|_| ProgramError::InvalidAccountData)?;
         offset += 32;
         
@@ -122,7 +124,7 @@ impl BorshDeserialize for MerkleTreeState {
         offset += 1;
         
         let next_index = u64::from_le_bytes(
-            data[offset..offset + 8].try_into()
+            <[u8; 8]>::try_from(&data[offset..offset + 8])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
         offset += 8;
@@ -165,7 +167,7 @@ impl BorshDeserialize for NullifierState {
         }
         
         let is_spent = data[0] != 0;
-        let nullifier_hash: [u8; 32] = data[1..33].try_into()
+        let nullifier_hash: [u8; 32] = <[u8; 32]>::try_from(&data[1..33])
             .map_err(|_| ProgramError::InvalidAccountData)?;
         
         Ok(Self {
@@ -191,10 +193,10 @@ impl BorshDeserialize for DepositorState {
         }
         
         let depositor = Pubkey::from(
-            data[0..32].try_into()
+            <[u8; 32]>::try_from(&data[0..32])
                 .map_err(|_| ProgramError::InvalidAccountData)?
         );
-        let label: [u8; 32] = data[32..64].try_into()
+        let label: [u8; 32] = <[u8; 32]>::try_from(&data[32..64])
             .map_err(|_| ProgramError::InvalidAccountData)?;
         
         Ok(Self {
@@ -263,7 +265,7 @@ impl PrivacyPoolState {
     }
     
     fn generate_scope(asset_mint: &Pubkey) -> [u8; 32] {
-        let mut hasher = solana_program::keccak::Hasher::default();
+        let mut hasher = keccak::Hasher::default();
         hasher.hash(b"PrivacyPool");
         hasher.hash(asset_mint.as_ref());
         hasher.result().to_bytes()
