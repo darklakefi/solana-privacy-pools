@@ -1,4 +1,4 @@
-const { PublicKey, Transaction, TransactionInstruction, SystemProgram } = require('@solana/web3.js');
+const { PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeBudgetProgram } = require('@solana/web3.js');
 const borsh = require('borsh');
 const fs = require('fs');
 const path = require('path');
@@ -14,10 +14,10 @@ const MAX_TREE_DEPTH = 32;
 const ROOT_HISTORY_SIZE = 64;
 const SNARK_SCALAR_FIELD = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
 
-// Account sizes (matching Rust)
-const PRIVACY_POOL_STATE_SIZE = 8 + 32 + 32 + 32 + 8 + 1 + 1 + 6 + 8 + (32 * ROOT_HISTORY_SIZE) + (32 * 2 * MAX_TREE_DEPTH);
-const DEPOSITOR_STATE_SIZE = 1 + 32 + 32;
-const NULLIFIER_STATE_SIZE = 1 + 32;
+// Account sizes (from Rust PrivacyPoolStateZC::LEN, etc)
+const PRIVACY_POOL_STATE_SIZE = 4265;
+const DEPOSITOR_STATE_SIZE = 64;
+const NULLIFIER_STATE_SIZE = 33;
 
 // Instruction enum discriminants
 const INSTRUCTION_INITIALIZE = 0;
@@ -100,8 +100,8 @@ class TestHelpers {
         const secretBn = BigInt('0x' + Buffer.from(secret).toString('hex'));
         const valueBn = BigInt(value);
         
-        // Hash using Poseidon
-        const hash = this.poseidon([labelBn, secretBn, valueBn]);
+        // Hash using Poseidon (poseidon2 is the actual function)
+        const hash = poseidon2([labelBn, secretBn, valueBn]);
         
         // Convert to bytes
         const hashBytes = Buffer.alloc(32);
@@ -117,7 +117,7 @@ class TestHelpers {
         const secretBn = BigInt('0x' + Buffer.from(secret).toString('hex'));
         
         // Hash using Poseidon
-        const hash = this.poseidon([commitmentBn, secretBn]);
+        const hash = poseidon2([commitmentBn, secretBn]);
         
         // Convert to bytes
         const hashBytes = Buffer.alloc(32);
@@ -266,6 +266,19 @@ class TestHelpers {
     // Generate commitment proof 
     async generateCommitmentProof(input) {
         return this.proofGenerator.generateCommitmentProof(input);
+    }
+    
+    // Add compute budget to transaction
+    addComputeBudget(transaction, computeUnits = 1200000) {
+        const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
+            units: computeUnits,
+        });
+        
+        // Add as first instruction
+        const instructions = [computeBudgetIx, ...transaction.instructions];
+        transaction.instructions = instructions;
+        
+        return transaction;
     }
 
     // Create PDA for depositor account

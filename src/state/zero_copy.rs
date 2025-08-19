@@ -146,18 +146,23 @@ impl MerkleTreeStateZC {
         Ok(())
     }
     
-    /// Initialize zeros for the merkle tree
+    /// Initialize zeros for the merkle tree (minimal initialization)
     pub fn init_zeros(&mut self) {
+        // Start with zero leaf
         self.zeros[0] = [0u8; 32];
-        for i in 1..=self.depth as usize {
-            if i < MAX_TREE_DEPTH as usize {
-                self.zeros[i] = crate::crypto::poseidon::hash_two(
-                    &self.zeros[i-1],
-                    &self.zeros[i-1]
-                );
-            }
+        
+        // For initialization, just set the empty root to zero
+        // We'll compute zeros lazily as needed during insertion
+        self.root = [0u8; 32];
+        
+        // Initialize filled_subtrees with zeros  
+        let actual_depth = self.depth.min(MAX_TREE_DEPTH) as usize;
+        for i in 0..actual_depth {
+            self.filled_subtrees[i] = [0u8; 32];
         }
-        self.root = self.zeros[self.depth as usize];
+        
+        // Set next index to 0
+        self.next_index = 0;
     }
 }
 
