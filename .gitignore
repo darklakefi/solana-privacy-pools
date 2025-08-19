@@ -1,0 +1,21 @@
+# Rust/Cargo
+/target
+Cargo.lock
+
+# Node modules
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Keep build artifacts and trusted setup
+# /build and /trusted-setup are intentionally NOT ignored

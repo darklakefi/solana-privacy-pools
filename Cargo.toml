@@ -1,0 +1,16 @@
+[package]
+name = "solana-privacy-pools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pinocchio = "0.6"
+solana-groth16-verifier = "0.1"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[profile.release]
+lto = true
+opt-level = "z"
+codegen-units = 1

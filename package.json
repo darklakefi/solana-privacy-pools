@@ -1,0 +1,18 @@
+{
+  "name": "solana-privacy-pools",
+  "version": "0.1.0",
+  "description": "Privacy pools implementation for Solana using Groth16",
+  "scripts": {
+    "build:circuits": "./build-circuits.sh",
+    "build:program": "cargo build-sbf --release",
+    "build": "./build.sh",
+    "clean": "rm -rf build target"
+  },
+  "devDependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.0"
+  },
+  "dependencies": {
+    "ffjavascript": "^0.3.1"
+  }
+}

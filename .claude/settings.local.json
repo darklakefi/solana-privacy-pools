@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(cp:*)",
+      "Bash(true)",
+      "Bash(tree:*)",
+      "Bash(./build-circuits.sh:*)",
+      "Bash(npm install)",
+      "Bash(circom:*)",
+      "Bash(npm install:*)",
+      "Bash(wget:*)",
+      "Bash(cargo install:*)",
+      "Bash(cat:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "/home/vitorpy/zk/privacy-pools-core/packages/circuits/circuits",
+      "/home/vitorpy/zk/privacy-pools-core/packages/circuits",
+      "/tmp/groth16-solana"
+    ]
+  }
+}
