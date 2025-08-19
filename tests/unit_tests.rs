@@ -1,4 +1,3 @@
-#[cfg(feature = "test-utils")]
 use pinocchio::{
     pubkey::Pubkey,
 };
@@ -6,6 +5,9 @@ use pinocchio::{
 use solana_privacy_pools::{
     crypto::{poseidon, merkle_tree::LeanIMT},
     constants,
+    instructions::{PrivacyPoolInstruction, WithdrawalData, WithdrawProofData, RagequitProofData},
+    BorshSerialize,
+    BorshDeserialize,
 };
 
 // Import test utilities when available
