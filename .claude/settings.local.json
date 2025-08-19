@@ -14,7 +14,8 @@
       "Bash(cargo install:*)",
       "Bash(cat:*)",
       "Bash(node:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cargo check:*)"
     ],
     "deny": [],
     "ask": [],

@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 pinocchio = "0.6"
-solana-groth16-verifier = "0.1"
+groth16-solana = "0.0.1"
+poseidon-ark = { git = "https://github.com/darklakefi/poseidon-ark" }
+solana-program = "1.18"
 
 [lib]
 crate-type = ["cdylib", "lib"]

@@ -1,8 +1,6 @@
-use groth16_solana::groth16::Groth16Verifyingkey;
+use crate::instructions::{WithdrawProofData, RagequitProofData};
 
-pub const VERIFYINGKEY: Groth16Verifyingkey =  Groth16Verifyingkey {
-	nr_pubinputs: 3,
-
+pub const VERIFYING_KEY: groth16_solana::verifying_key::VerifyingKey = groth16_solana::verifying_key::VerifyingKey {
 	vk_alpha_g1: [
 		45,77,154,167,227,2,217,223,65,116,157,85,7,148,157,5,219,234,51,251,177,108,100,59,34,245,153,162,190,109,242,226,
 		20,190,221,80,60,55,206,176,97,216,236,96,32,159,227,69,206,137,131,10,25,35,3,1,240,118,202,255,0,77,25,38,
@@ -44,3 +42,41 @@ pub const VERIFYINGKEY: Groth16Verifyingkey =  Groth16Verifyingkey {
 		],
 	]
 };
+
+/// Verify a withdrawal proof using Groth16
+pub fn verify_withdraw_proof(proof_data: &WithdrawProofData) -> bool {
+    let public_inputs: Vec<&[u8]> = proof_data.public_signals
+        .iter()
+        .map(|signal| signal.as_slice())
+        .collect();
+        
+    match groth16_solana::verifier::Groth16Verifier::new(
+        &proof_data.proof_a,
+        &proof_data.proof_b, 
+        &proof_data.proof_c,
+        public_inputs.as_slice(),
+        &VERIFYING_KEY,
+    ) {
+        Ok(mut verifier) => verifier.verify().is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Verify a ragequit proof using Groth16  
+pub fn verify_ragequit_proof(proof_data: &RagequitProofData) -> bool {
+    let public_inputs: Vec<&[u8]> = proof_data.public_signals
+        .iter()
+        .map(|signal| signal.as_slice())
+        .collect();
+        
+    match groth16_solana::verifier::Groth16Verifier::new(
+        &proof_data.proof_a,
+        &proof_data.proof_b,
+        &proof_data.proof_c, 
+        public_inputs.as_slice(),
+        &VERIFYING_KEY,
+    ) {
+        Ok(mut verifier) => verifier.verify().is_ok(),
+        Err(_) => false,
+    }
+}
