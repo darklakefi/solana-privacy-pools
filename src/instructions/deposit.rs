@@ -1,6 +1,5 @@
 use pinocchio::{
     account_info::AccountInfo,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
