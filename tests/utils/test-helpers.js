@@ -2,8 +2,9 @@ const { PublicKey, Transaction, TransactionInstruction, SystemProgram } = requir
 const borsh = require('borsh');
 const fs = require('fs');
 const path = require('path');
-const snarkjs = require('snarkjs');
+const { ProofGenerator } = require('./proof-generator');
 const { poseidon2 } = require('circomlibjs');
+const crypto = require('crypto');
 
 // Program ID - should match the deployed program
 const PROGRAM_ID = new PublicKey('11111111111111111111111111111111');
@@ -78,16 +79,19 @@ const instructionSchema = {
 class TestHelpers {
     constructor() {
         this.poseidon = poseidon2;
+        this.proofGenerator = new ProofGenerator();
     }
 
     // Generate a random field element
     randomFieldElement() {
-        const bytes = Buffer.alloc(32);
-        for (let i = 0; i < 31; i++) {
-            bytes[i] = Math.floor(Math.random() * 256);
-        }
+        const bytes = crypto.randomBytes(31);
         const value = BigInt('0x' + bytes.toString('hex'));
         return value % SNARK_SCALAR_FIELD;
+    }
+    
+    // Generate random bytes
+    randomBytes32() {
+        return crypto.randomBytes(32);
     }
 
     // Generate commitment hash using Poseidon
@@ -249,52 +253,19 @@ class TestHelpers {
         return buffer;
     }
 
-    // Generate proof using snarkjs
-    async generateWithdrawProof(circuitWasm, circuitZkey, input) {
-        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-            input,
-            circuitWasm,
-            circuitZkey
-        );
-
-        // Convert proof to the format expected by the program
-        const proofA = Buffer.alloc(64);
-        const proofB = Buffer.alloc(128);
-        const proofC = Buffer.alloc(64);
-
-        // Pack proof components (this is a simplified version)
-        // In production, you'd need proper G1/G2 point encoding
-        Buffer.from(proof.pi_a[0].toString(16), 'hex').copy(proofA, 0);
-        Buffer.from(proof.pi_a[1].toString(16), 'hex').copy(proofA, 32);
-        
-        Buffer.from(proof.pi_b[0][0].toString(16), 'hex').copy(proofB, 0);
-        Buffer.from(proof.pi_b[0][1].toString(16), 'hex').copy(proofB, 32);
-        Buffer.from(proof.pi_b[1][0].toString(16), 'hex').copy(proofB, 64);
-        Buffer.from(proof.pi_b[1][1].toString(16), 'hex').copy(proofB, 96);
-        
-        Buffer.from(proof.pi_c[0].toString(16), 'hex').copy(proofC, 0);
-        Buffer.from(proof.pi_c[1].toString(16), 'hex').copy(proofC, 32);
-
-        // Convert public signals to bytes
-        const signals = publicSignals.map(signal => {
-            const bytes = Buffer.alloc(32);
-            const hex = BigInt(signal).toString(16).padStart(64, '0');
-            bytes.write(hex, 'hex');
-            return bytes;
-        });
-
-        return {
-            proofA,
-            proofB,
-            proofC,
-            publicSignals: signals,
-        };
+    // Generate proof using the proof generator
+    async generateWithdrawProof(input) {
+        return this.proofGenerator.generateWithdrawProof(input);
     }
 
-    // Generate ragequit proof using snarkjs
-    async generateRagequitProof(circuitWasm, circuitZkey, input) {
-        // Similar to generateWithdrawProof but for ragequit circuit
-        return this.generateWithdrawProof(circuitWasm, circuitZkey, input);
+    // Generate ragequit proof using the proof generator
+    async generateRagequitProof(input) {
+        return this.proofGenerator.generateRagequitProof(input);
+    }
+    
+    // Generate commitment proof 
+    async generateCommitmentProof(input) {
+        return this.proofGenerator.generateCommitmentProof(input);
     }
 
     // Create PDA for depositor account
@@ -322,19 +293,6 @@ class TestHelpers {
         );
     }
 
-    // Load circuit files
-    loadCircuitFiles(circuitName) {
-        const circuitDir = path.join(__dirname, '../../trusted-setup/final-keys');
-        const wasmPath = path.join(__dirname, `../../build/${circuitName}_js/${circuitName}.wasm`);
-        const zkeyPath = path.join(circuitDir, `${circuitName}_final.zkey`);
-        const vkeyPath = path.join(circuitDir, `${circuitName}_vkey.json`);
-
-        return {
-            wasm: wasmPath,
-            zkey: zkeyPath,
-            vkey: JSON.parse(fs.readFileSync(vkeyPath, 'utf8')),
-        };
-    }
 }
 
 module.exports = {
