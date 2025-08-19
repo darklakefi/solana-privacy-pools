@@ -14,7 +14,7 @@ use solana_privacy_pools::{
 };
 
 // Import test utilities
-use solana_privacy_pools::utils::test_helpers::*;
+use solana_privacy_pools::utils::*;
 
 #[cfg(test)]
 mod constructor_tests {

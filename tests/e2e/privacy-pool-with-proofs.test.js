@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { LiteSVM } = require('@litesvm/node');
+const { LiteSVM } = require('litesvm');
 const { 
     Keypair, 
     PublicKey, 
@@ -39,7 +39,7 @@ describe('Privacy Pool E2E Tests with ZK Proofs', () => {
         }
         
         // Check if circuits are built
-        const circuitPath = path.join(__dirname, '../../build/withdraw_js/withdraw.wasm');
+        const circuitPath = path.join(__dirname, '../../build/withdraw/withdraw_js/withdraw.wasm');
         if (!fs.existsSync(circuitPath)) {
             console.log('Circuits not built. Run: ./build-circuits.sh');
             this.skip();

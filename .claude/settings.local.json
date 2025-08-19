@@ -19,7 +19,10 @@
       "Bash(cargo test:*)",
       "Bash(rm:*)",
       "Bash(mv:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(npm search:*)",
+      "Bash(npm test:*)",
+      "Bash(npx mocha:*)"
     ],
     "deny": [],
     "ask": [],

@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { LiteSVM } = require('@litesvm/node');
+const { LiteSVM } = require('litesvm');
 const { 
     Keypair, 
     PublicKey, 
