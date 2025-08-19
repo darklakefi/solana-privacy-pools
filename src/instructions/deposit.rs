@@ -16,6 +16,10 @@ pub fn deposit(
     value: u64,
     precommitment_hash: [u8; 32],
 ) -> ProgramResult {
+    if accounts.len() < 3 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+    
     let pool_account = &accounts[0];
     let depositor_account = &accounts[1];
     let depositor_signer = &accounts[2];
@@ -24,21 +28,17 @@ pub fn deposit(
         return Err(ProgramError::MissingRequiredSignature);
     }
     
-    // Verify the depositor matches the instruction parameter
     if depositor_signer.key() != &depositor {
         return Err(ProgramError::InvalidArgument);
     }
     
-    // Get mutable reference to pool state using zero-copy
     let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
     
     if pool_state.is_dead() {
-        msg!("Pool is dead, deposits not allowed");
         return Err(ProgramError::InvalidAccountData);
     }
     
     if value >= u128::MAX as u64 {
-        msg!("Invalid deposit value");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -53,7 +53,5 @@ pub fn deposit(
     // Update depositor state using zero-copy
     let depositor_state = DepositorStateZC::from_account_mut(depositor_account)?;
     depositor_state.set(depositor, label);
-    
-    msg!("Deposited {} tokens, commitment: {:?}", value, commitment);
     Ok(())
 }

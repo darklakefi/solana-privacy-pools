@@ -155,6 +155,10 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                     precommitment_hash,
                 })
             }
+            4 => {
+                // WindDown instruction - no additional data needed
+                Ok(PrivacyPoolInstruction::WindDown)
+            }
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }

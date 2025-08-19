@@ -28,9 +28,9 @@ pub fn compute_label(scope: &[u8; 32], nonce: u64) -> [u8; 32] {
     hasher.hash(&nonce.to_le_bytes());
     let hash = hasher.result().to_bytes();
     
-    // Convert through field element for proper modular reduction
-    let field = Poseidon::bytes_to_field(&hash);
-    Poseidon::field_to_bytes(&field)
+    // With native Poseidon, we can use the hash directly
+    // The syscall handles field modular reduction internally
+    hash
 }
 
 /// Compute commitment hash: PoseidonT4.hash([value, label, precommitment_hash])  
@@ -65,9 +65,9 @@ pub fn compute_context(withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32
     
     let hash = hasher.result().to_bytes();
     
-    // Convert through field element for proper modular reduction
-    let field = Poseidon::bytes_to_field(&hash);
-    Poseidon::field_to_bytes(&field)
+    // With native Poseidon, we can use the hash directly
+    // The syscall handles field modular reduction internally
+    hash
 }
 
 #[cfg(test)]

@@ -22,7 +22,8 @@
       "Bash(cargo build:*)",
       "Bash(npm search:*)",
       "Bash(npm test:*)",
-      "Bash(npx mocha:*)"
+      "Bash(npx mocha:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": [],

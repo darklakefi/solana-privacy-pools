@@ -16,6 +16,7 @@ crate-type = ["cdylib", "lib"]
 
 [features]
 test-utils = []
+test-precomputed-hashes = []
 
 [dev-dependencies]
 # Keep minimal for now

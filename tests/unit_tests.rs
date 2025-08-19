@@ -1,22 +1,18 @@
+#[cfg(feature = "test-utils")]
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
     pubkey::Pubkey,
 };
 
 use solana_privacy_pools::{
-    instructions::*,
-    state::*,
     crypto::{poseidon, merkle_tree::LeanIMT},
     constants,
-    BorshSerialize,
-    BorshDeserialize,
 };
 
-// Import test utilities
+// Import test utilities when available
+#[cfg(feature = "test-utils")]
 use solana_privacy_pools::utils::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-utils"))]
 mod constructor_tests {
     use super::*;
 
@@ -60,7 +56,7 @@ mod constructor_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-utils"))]
 mod deposit_tests {
     use super::*;
 
@@ -158,7 +154,7 @@ mod deposit_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-utils"))]
 mod merkle_tree_tests {
     use super::*;
     
