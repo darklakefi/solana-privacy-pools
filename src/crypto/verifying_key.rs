@@ -71,7 +71,7 @@ pub fn verify_withdraw_proof(proof_data: &WithdrawProofData) -> bool {
 
 /// Verify a ragequit proof using Groth16  
 pub fn verify_ragequit_proof(proof_data: &RagequitProofData) -> bool {
-    let public_inputs: Vec<&[u8]> = proof_data.public_signals
+    let _public_inputs: Vec<&[u8]> = proof_data.public_signals
         .iter()
         .map(|signal| signal.as_slice())
         .collect();

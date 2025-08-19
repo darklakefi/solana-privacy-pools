@@ -6,11 +6,10 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::{BorshSerialize};
-use crate::state::*;
+use crate::state::zero_copy::{PrivacyPoolStateZC, DepositorStateZC, NullifierStateZC};
 use super::types::RagequitProofData;
 
-/// Process a ragequit (original depositor exit)
+/// Process a ragequit withdrawal using zero-copy accounts
 pub fn ragequit(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -18,18 +17,20 @@ pub fn ragequit(
 ) -> ProgramResult {
     let pool_account = &accounts[0];
     let depositor_account = &accounts[1];
-    let nullifier_account = &accounts[2];
-    let ragequitter = &accounts[3];
-    let asset_vault = &accounts[4];
-    let ragequitter_token_account = &accounts[5];
+    let ragequitter_account = &accounts[2];
+    let nullifier_account = &accounts[3];
     
-    if !ragequitter.is_signer() {
+    if !ragequitter_account.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
     
-    let depositor_state = get_depositor_state(depositor_account)?;
-    if depositor_state.depositor != *ragequitter.key() {
-        msg!("Only original depositor can ragequit");
+    // Get pool state using zero-copy (currently unused but will be needed for validation)
+    let _pool_state = PrivacyPoolStateZC::from_account(pool_account)?;
+    
+    // Verify depositor
+    let depositor_state = DepositorStateZC::from_account_mut(depositor_account)?;
+    if &depositor_state.depositor != ragequitter_account.key().as_ref() {
+        msg!("Not original depositor");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -38,17 +39,18 @@ pub fn ragequit(
         return Err(ProgramError::InvalidArgument);
     }
     
+    // Verify the proof
     if !crate::crypto::verifying_key::verify_ragequit_proof(&proof_data) {
         msg!("Invalid ragequit proof");
         return Err(ProgramError::InvalidArgument);
     }
     
-    let nullifier_state = NullifierState::new(proof_data.nullifier_hash());
-    let nullifier_data = nullifier_state.try_to_vec()?;
-    nullifier_account.try_borrow_mut_data()?[..].copy_from_slice(&nullifier_data);
+    // Update nullifier state using zero-copy
+    let nullifier_state = NullifierStateZC::from_account_mut(nullifier_account)?;
+    nullifier_state.set_spent(proof_data.nullifier_hash());
     
     msg!("Ragequit processed: {} tokens to {:?}", 
          proof_data.value(), 
-         ragequitter.key());
+         ragequitter_account.key());
     Ok(())
 }

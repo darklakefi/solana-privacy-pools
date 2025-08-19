@@ -173,7 +173,7 @@ impl LeanIMT {
     // Helper functions for compatibility with existing tests
     pub fn verify_inclusion(
         &self,
-        leaf: [u8; 32],
+        _leaf: [u8; 32],
         index: u64,
         siblings: &[[u8; 32]],
         _depth: u8,

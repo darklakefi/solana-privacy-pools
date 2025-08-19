@@ -6,10 +6,9 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::{BorshSerialize};
-use crate::state::*;
+use crate::state::zero_copy::{PrivacyPoolStateZC, DepositorStateZC};
 
-/// Make a deposit to the privacy pool
+/// Make a deposit to the privacy pool using zero-copy accounts
 pub fn deposit(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -20,16 +19,15 @@ pub fn deposit(
     let pool_account = &accounts[0];
     let entrypoint_account = &accounts[1];
     let depositor_account = &accounts[2];
-    let asset_vault = &accounts[3];
-    let user_token_account = &accounts[4];
     
     if !entrypoint_account.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
     
-    let mut pool_state = get_privacy_pool_state(pool_account)?;
+    // Get mutable reference to pool state using zero-copy
+    let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
     
-    if pool_state.dead {
+    if pool_state.is_dead() {
         msg!("Pool is dead, deposits not allowed");
         return Err(ProgramError::InvalidAccountData);
     }
@@ -40,20 +38,16 @@ pub fn deposit(
     }
     
     let nonce = pool_state.increment_nonce();
-    
     let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
-    
     let commitment = crate::crypto::poseidon::compute_commitment(value, &label, &precommitment_hash);
     
+    // Update merkle tree in-place
     pool_state.merkle_tree.insert(commitment)?;
     pool_state.add_root(pool_state.merkle_tree.root);
     
-    let depositor_state = DepositorState::new(depositor, label);
-    let depositor_data = depositor_state.try_to_vec()?;
-    depositor_account.try_borrow_mut_data()?[..].copy_from_slice(&depositor_data);
-    
-    let pool_data = pool_state.try_to_vec()?;
-    pool_account.try_borrow_mut_data()?[..].copy_from_slice(&pool_data);
+    // Update depositor state using zero-copy
+    let depositor_state = DepositorStateZC::from_account_mut(depositor_account)?;
+    depositor_state.set(depositor, label);
     
     msg!("Deposited {} tokens, commitment: {:?}", value, commitment);
     Ok(())

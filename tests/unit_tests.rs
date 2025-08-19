@@ -8,11 +8,13 @@ use solana_privacy_pools::{
     instructions::*,
     state::*,
     crypto::{poseidon, merkle_tree::LeanIMT},
-    utils::*,
     constants,
     BorshSerialize,
     BorshDeserialize,
 };
+
+// Import test utilities
+use solana_privacy_pools::utils::test_helpers::*;
 
 #[cfg(test)]
 mod constructor_tests {

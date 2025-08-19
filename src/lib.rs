@@ -1,7 +1,6 @@
 use pinocchio::{
     account_info::AccountInfo,
     entrypoint,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
@@ -11,10 +10,11 @@ pub mod state;
 pub mod instructions;
 pub mod crypto;
 
+// Utils module is test-only
+#[cfg(any(test, feature = "test-utils"))]
 pub mod utils;
 
 use crate::instructions::*;
-use crate::state::*;
 
 entrypoint!(process_instruction);
 

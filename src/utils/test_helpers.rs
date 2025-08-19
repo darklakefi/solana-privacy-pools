@@ -5,7 +5,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::state::*;
+use crate::state::test_compat::*;
 use crate::instructions::*;
 use crate::{BorshSerialize, BorshDeserialize};
 
