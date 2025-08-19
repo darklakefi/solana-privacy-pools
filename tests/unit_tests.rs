@@ -7,8 +7,9 @@ use pinocchio::{
 use solana_privacy_pools::{
     instructions::*,
     state::*,
-    poseidon,
-    test_helpers::*,
+    crypto::{poseidon, merkle_tree::LeanIMT},
+    utils::*,
+    constants,
     BorshSerialize,
     BorshDeserialize,
 };
@@ -22,7 +23,12 @@ mod constructor_tests {
         let mut ctx = TestContext::new();
         
         // Initialize the pool
-        assert!(ctx.initialize_pool().is_ok());
+        let init_result = ctx.initialize_pool();
+        assert!(init_result.is_ok(), "Failed to initialize: {:?}", init_result);
+        
+        // Debug: Check data length
+        println!("Pool account data length: {}", ctx.pool_account.data.len());
+        println!("Expected PrivacyPoolState::LEN: {}", PrivacyPoolState::LEN);
         
         // Verify the pool state
         let pool_state = ctx.get_pool_state().unwrap();
@@ -156,7 +162,7 @@ mod merkle_tree_tests {
     
     #[test]
     fn test_merkle_tree_insertion() {
-        let mut tree = crate::merkle_tree::LeanIMT::new(4);
+        let mut tree = LeanIMT::new(4);
         
         let leaf1 = [1u8; 32];
         let leaf2 = [2u8; 32];
@@ -167,26 +173,26 @@ mod merkle_tree_tests {
         let index2 = tree.insert(leaf2).unwrap();
         assert_eq!(index2, 1);
         
-        assert_eq!(tree.size, 2);
-        assert_ne!(tree.root, [0u8; 32]);
+        assert_eq!(tree.size(), 2);
+        assert_ne!(tree.root(), [0u8; 32]);
     }
 
     #[test]
     fn test_merkle_tree_inclusion_proof() {
-        let mut tree = crate::merkle_tree::LeanIMT::new(4);
+        let mut tree = LeanIMT::new(4);
         
         let leaf = [42u8; 32];
         let index = tree.insert(leaf).unwrap();
         
         let siblings = tree.get_sibling_path(index);
-        let is_valid = tree.verify_inclusion(leaf, index, &siblings, tree.depth);
+        let is_valid = tree.verify_inclusion(leaf, index, &siblings, tree.depth());
         
         assert!(is_valid);
     }
 
     #[test]
     fn test_merkle_tree_multiple_insertions() {
-        let mut tree = crate::merkle_tree::LeanIMT::new(8);
+        let mut tree = LeanIMT::new(8);
         let mut leaves = Vec::new();
         let mut indices = Vec::new();
         
@@ -202,14 +208,21 @@ mod merkle_tree_tests {
         // Verify all insertions
         for (i, leaf) in leaves.iter().enumerate() {
             let siblings = tree.get_sibling_path(indices[i]);
-            let is_valid = tree.verify_inclusion(*leaf, indices[i], &siblings, tree.depth);
+            let is_valid = tree.verify_inclusion(*leaf, indices[i], &siblings, tree.depth());
+            if !is_valid {
+                println!("Leaf {} verification failed", i);
+                println!("  Leaf: {:?}", leaf);
+                println!("  Index: {}", indices[i]);
+                println!("  Tree root: {:?}", tree.root());
+                println!("  Siblings: {:?}", siblings);
+            }
             assert!(is_valid, "Leaf {} should be valid", i);
         }
     }
 
     #[test]
     fn test_merkle_tree_full_capacity() {
-        let mut tree = crate::merkle_tree::LeanIMT::new(2); // Small tree for testing
+        let mut tree = LeanIMT::new(2); // Small tree for testing
         
         // Fill to capacity (2^2 = 4 leaves)
         for i in 0..4 {
@@ -450,7 +463,7 @@ mod state_tests {
         let mut pool_state = ctx.get_pool_state().unwrap();
         
         // Test adding roots up to capacity
-        for i in 0..crate::constants::ROOT_HISTORY_SIZE {
+        for i in 0..constants::ROOT_HISTORY_SIZE {
             let root = [i as u8; 32];
             pool_state.add_root(root);
             

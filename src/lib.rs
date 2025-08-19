@@ -7,14 +7,11 @@ use pinocchio::{
     ProgramResult,
 };
 
-mod verifying_key;
-mod state;
-mod instructions;
-mod merkle_tree;
-mod poseidon;
+pub mod state;
+pub mod instructions;
+pub mod crypto;
 
-#[cfg(test)]
-mod test_helpers;
+pub mod utils;
 
 use crate::instructions::*;
 use crate::state::*;
@@ -27,46 +24,7 @@ pub fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     let instruction = PrivacyPoolInstruction::try_from_slice(instruction_data)?;
-    
-    match instruction {
-        PrivacyPoolInstruction::InitializePool { 
-            entrypoint_authority,
-            max_tree_depth,
-            asset_mint,
-        } => {
-            msg!("Instruction: Initialize Privacy Pool");
-            instructions::initialize_pool(program_id, accounts, entrypoint_authority, max_tree_depth, asset_mint)
-        }
-        
-        PrivacyPoolInstruction::Deposit {
-            depositor,
-            value,
-            precommitment_hash,
-        } => {
-            msg!("Instruction: Deposit");
-            instructions::deposit(program_id, accounts, depositor, value, precommitment_hash)
-        }
-        
-        PrivacyPoolInstruction::Withdraw {
-            withdrawal_data,
-            proof_data,
-        } => {
-            msg!("Instruction: Withdraw");
-            instructions::withdraw(program_id, accounts, withdrawal_data, proof_data)
-        }
-        
-        PrivacyPoolInstruction::Ragequit {
-            proof_data,
-        } => {
-            msg!("Instruction: Ragequit");
-            instructions::ragequit(program_id, accounts, proof_data)
-        }
-        
-        PrivacyPoolInstruction::WindDown => {
-            msg!("Instruction: Wind Down Pool");
-            instructions::wind_down(program_id, accounts)
-        }
-    }
+    instructions::process_instruction(instruction, program_id, accounts)
 }
 
 /// Basic serialization/deserialization traits
@@ -82,40 +40,6 @@ pub trait BorshDeserialize {
     }
 }
 
-impl BorshDeserialize for PrivacyPoolInstruction {
-    fn try_from_slice(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.is_empty() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        
-        match data[0] {
-            0 => {
-                if data.len() < 1 + 32 + 1 + 32 {
-                    return Err(ProgramError::InvalidInstructionData);
-                }
-                let mut offset = 1;
-                let entrypoint_authority = Pubkey::from(
-                    <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
-                );
-                offset += 32;
-                let max_tree_depth = data[offset];
-                offset += 1;
-                let asset_mint = Pubkey::from(
-                    <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
-                );
-                
-                Ok(PrivacyPoolInstruction::InitializePool {
-                    entrypoint_authority,
-                    max_tree_depth,
-                    asset_mint,
-                })
-            }
-            _ => Err(ProgramError::InvalidInstructionData),
-        }
-    }
-}
 
 /// Constants from the Solidity contract
 pub mod constants {

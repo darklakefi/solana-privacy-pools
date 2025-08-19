@@ -17,14 +17,17 @@
       "Bash(grep:*)",
       "Bash(cargo check:*)",
       "Bash(cargo test:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(cargo build:*)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
       "/home/vitorpy/zk/privacy-pools-core/packages/circuits/circuits",
       "/home/vitorpy/zk/privacy-pools-core/packages/circuits",
-      "/tmp/groth16-solana"
+      "/tmp/groth16-solana",
+      "/home/vitorpy/zk/privacy-pools-core"
     ]
   }
 }

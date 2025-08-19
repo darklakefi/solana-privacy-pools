@@ -7,6 +7,7 @@ use pinocchio::{
 use solana_program::keccak;
 
 use crate::{BorshSerialize, BorshDeserialize, constants::*};
+use crate::crypto::poseidon;
 
 impl BorshSerialize for PrivacyPoolState {
     fn try_to_vec(&self) -> Result<Vec<u8>, ProgramError> {
@@ -101,11 +102,22 @@ impl BorshSerialize for MerkleTreeState {
         data.push(self.depth);
         data.extend_from_slice(&self.next_index.to_le_bytes());
         
-        for subtree in &self.filled_subtrees {
-            data.extend_from_slice(subtree);
+        // Serialize filled_subtrees with padding to MAX_TREE_DEPTH
+        for i in 0..MAX_TREE_DEPTH as usize {
+            if i < self.filled_subtrees.len() {
+                data.extend_from_slice(&self.filled_subtrees[i]);
+            } else {
+                data.extend_from_slice(&[0u8; 32]);
+            }
         }
-        for zero in &self.zeros {
-            data.extend_from_slice(zero);
+        
+        // Serialize zeros with padding to MAX_TREE_DEPTH  
+        for i in 0..MAX_TREE_DEPTH as usize {
+            if i < self.zeros.len() {
+                data.extend_from_slice(&self.zeros[i]);
+            } else {
+                data.extend_from_slice(&[0u8; 32]);
+            }
         }
         
         Ok(data)
@@ -303,7 +315,7 @@ impl MerkleTreeState {
     fn compute_zeros(max_depth: u8) -> Vec<[u8; 32]> {
         let mut zeros = vec![[0u8; 32]; (max_depth + 1) as usize];
         for i in 1..=max_depth as usize {
-            zeros[i] = crate::poseidon::hash_two(&zeros[i-1], &zeros[i-1]);
+            zeros[i] = poseidon::hash_two(&zeros[i-1], &zeros[i-1]);
         }
         zeros
     }
@@ -324,7 +336,7 @@ impl MerkleTreeState {
                 right = current_level_hash;
             }
             
-            current_level_hash = crate::poseidon::hash_two(&left, &right);
+            current_level_hash = poseidon::hash_two(&left, &right);
             current_index /= 2;
         }
         

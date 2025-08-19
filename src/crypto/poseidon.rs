@@ -1,5 +1,5 @@
 use poseidon_ark::Poseidon;
-use crate::instructions::WithdrawalData;
+use crate::instructions::types::WithdrawalData;
 
 /// Poseidon hash of two byte arrays
 pub fn hash_two(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {

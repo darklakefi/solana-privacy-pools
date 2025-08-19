@@ -1,4 +1,3 @@
-#[cfg(test)]
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
@@ -6,14 +5,10 @@ use pinocchio::{
     ProgramResult,
 };
 
-#[cfg(test)]
 use crate::state::*;
-#[cfg(test)]
 use crate::instructions::*;
-#[cfg(test)]
 use crate::{BorshSerialize, BorshDeserialize};
 
-#[cfg(test)]
 pub struct TestContext {
     pub program_id: Pubkey,
     pub entrypoint_authority: Pubkey,
@@ -23,7 +18,6 @@ pub struct TestContext {
     pub nullifier_accounts: Vec<TestAccount>,
 }
 
-#[cfg(test)]
 pub struct TestAccount {
     pub key: Pubkey,
     pub lamports: u64,
@@ -33,7 +27,6 @@ pub struct TestAccount {
     pub rent_epoch: u64,
 }
 
-#[cfg(test)]
 impl TestAccount {
     pub fn new(key: Pubkey, owner: Pubkey, data_len: usize) -> Self {
         Self {
@@ -53,7 +46,6 @@ impl TestAccount {
     }
 }
 
-#[cfg(test)]
 impl TestContext {
     pub fn new() -> Self {
         let program_id = Pubkey::from([1u8; 32]);
@@ -125,7 +117,6 @@ impl TestContext {
     }
 }
 
-#[cfg(test)]
 pub fn create_test_withdrawal_data() -> WithdrawalData {
     WithdrawalData {
         processooor: Pubkey::from([10u8; 32]),
@@ -133,33 +124,43 @@ pub fn create_test_withdrawal_data() -> WithdrawalData {
     }
 }
 
-#[cfg(test)]
 pub fn create_test_withdraw_proof_data() -> WithdrawProofData {
+    let mut value_bytes = [0u8; 32];
+    value_bytes[..8].copy_from_slice(&100u64.to_le_bytes());
+    
+    let mut depth_bytes = [0u8; 32];
+    depth_bytes[0] = 1;  // state_tree_depth = 1
+    
+    let mut asp_depth_bytes = [0u8; 32];
+    asp_depth_bytes[0] = 2;  // asp_tree_depth = 2
+    
     WithdrawProofData {
         proof_a: [1u8; 64],
         proof_b: [2u8; 128],
         proof_c: [3u8; 64],
         public_signals: vec![
-            [100u8; 32], // withdrawn_value  
-            [200u8; 32], // state_root
-            [1u8; 32],   // state_tree_depth
-            [201u8; 32], // asp_root
-            [2u8; 32],   // asp_tree_depth
-            [202u8; 32], // context
-            [203u8; 32], // new_commitment_hash
-            [204u8; 32], // existing_nullifier_hash
+            value_bytes,      // withdrawn_value = 100
+            [200u8; 32],      // state_root
+            depth_bytes,      // state_tree_depth = 1
+            [201u8; 32],      // asp_root
+            asp_depth_bytes,  // asp_tree_depth = 2
+            [202u8; 32],      // context
+            [203u8; 32],      // new_commitment_hash
+            [204u8; 32],      // existing_nullifier_hash
         ],
     }
 }
 
-#[cfg(test)]
 pub fn create_test_ragequit_proof_data() -> RagequitProofData {
+    let mut value_bytes = [0u8; 32];
+    value_bytes[..8].copy_from_slice(&100u64.to_le_bytes());
+    
     RagequitProofData {
         proof_a: [4u8; 64],
         proof_b: [5u8; 128],
         proof_c: [6u8; 64],
         public_signals: vec![
-            [100u8; 32], // value
+            value_bytes, // value = 100
             [50u8; 32],  // label  
             [51u8; 32],  // commitment_hash
             [52u8; 32],  // nullifier_hash
