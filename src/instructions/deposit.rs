@@ -17,11 +17,16 @@ pub fn deposit(
     precommitment_hash: [u8; 32],
 ) -> ProgramResult {
     let pool_account = &accounts[0];
-    let entrypoint_account = &accounts[1];
-    let depositor_account = &accounts[2];
+    let depositor_account = &accounts[1];
+    let depositor_signer = &accounts[2];
     
-    if !entrypoint_account.is_signer() {
+    if !depositor_signer.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
+    }
+    
+    // Verify the depositor matches the instruction parameter
+    if depositor_signer.key() != &depositor {
+        return Err(ProgramError::InvalidArgument);
     }
     
     // Get mutable reference to pool state using zero-copy

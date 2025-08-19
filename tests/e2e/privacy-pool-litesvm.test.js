@@ -180,13 +180,13 @@ describe('Privacy Pool LiteSVM Tests', () => {
             svm.sendTransaction(tx);
         });
 
-        it('should deposit funds into the pool', () => {
+        it('should deposit funds into the pool', async () => {
             // Generate commitment
             const label = Buffer.alloc(32);
             label.write('test-label');
             const secret = Buffer.from(helpers.randomFieldElement().toString(16).padStart(64, '0'), 'hex');
             const value = 1000000; // 0.001 SOL
-            const commitmentHash = helpers.generateCommitment(label, secret, value);
+            const commitmentHash = await helpers.generateCommitment(label, secret, value);
 
             // Find depositor PDA (using test helper's mock PDA)
             const depositorPDA = Keypair.generate(); // For testing, use a regular keypair
@@ -229,7 +229,7 @@ describe('Privacy Pool LiteSVM Tests', () => {
             console.log('Deposit successful');
         });
 
-        it('should handle multiple deposits', () => {
+        it('should handle multiple deposits', async () => {
             const deposits = [];
             
             // Create 3 deposits
@@ -238,7 +238,7 @@ describe('Privacy Pool LiteSVM Tests', () => {
                 label.write(`deposit-${i}`);
                 const secret = helpers.randomBytes32();
                 const value = (i + 1) * 1000000;
-                const commitmentHash = helpers.generateCommitment(label, secret, value);
+                const commitmentHash = await helpers.generateCommitment(label, secret, value);
                 
                 deposits.push({ label, secret, value, commitmentHash });
                 

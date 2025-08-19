@@ -3,7 +3,7 @@ const borsh = require('borsh');
 const fs = require('fs');
 const path = require('path');
 const { ProofGenerator } = require('./proof-generator');
-const { poseidon2 } = require('circomlibjs');
+const { buildPoseidon } = require('circomlibjs');
 const crypto = require('crypto');
 
 // Program ID - should match the deployed program
@@ -78,8 +78,20 @@ const instructionSchema = {
 
 class TestHelpers {
     constructor() {
-        this.poseidon = poseidon2;
+        this.poseidon = null;
         this.proofGenerator = new ProofGenerator();
+        this._initPoseidon();
+    }
+    
+    async _initPoseidon() {
+        this.poseidon = await buildPoseidon();
+    }
+    
+    async ensurePoseidon() {
+        if (!this.poseidon) {
+            await this._initPoseidon();
+        }
+        return this.poseidon;
     }
 
     // Generate a random field element
@@ -95,13 +107,15 @@ class TestHelpers {
     }
 
     // Generate commitment hash using Poseidon
-    generateCommitment(label, secret, value) {
+    async generateCommitment(label, secret, value) {
+        const poseidon = await this.ensurePoseidon();
+        
         const labelBn = BigInt('0x' + Buffer.from(label).toString('hex'));
         const secretBn = BigInt('0x' + Buffer.from(secret).toString('hex'));
         const valueBn = BigInt(value);
         
-        // Hash using Poseidon (poseidon2 is the actual function)
-        const hash = poseidon2([labelBn, secretBn, valueBn]);
+        // Hash using Poseidon
+        const hash = poseidon([labelBn, secretBn, valueBn]);
         
         // Convert to bytes
         const hashBytes = Buffer.alloc(32);
@@ -112,12 +126,14 @@ class TestHelpers {
     }
 
     // Generate nullifier hash using Poseidon
-    generateNullifier(commitment, secret) {
+    async generateNullifier(commitment, secret) {
+        const poseidon = await this.ensurePoseidon();
+        
         const commitmentBn = BigInt('0x' + Buffer.from(commitment).toString('hex'));
         const secretBn = BigInt('0x' + Buffer.from(secret).toString('hex'));
         
         // Hash using Poseidon
-        const hash = poseidon2([commitmentBn, secretBn]);
+        const hash = poseidon([commitmentBn, secretBn]);
         
         // Convert to bytes
         const hashBytes = Buffer.alloc(32);
@@ -129,9 +145,12 @@ class TestHelpers {
 
     // Create initialize instruction
     createInitializeInstruction(poolAccount, entrypointAuthority, assetMint, maxTreeDepth = 20) {
-        const data = Buffer.alloc(2);
-        data[0] = INSTRUCTION_INITIALIZE;
-        data[1] = maxTreeDepth;
+        const data = Buffer.alloc(1 + 32 + 1 + 32); // instruction + entrypoint_authority + max_tree_depth + asset_mint
+        let offset = 0;
+        data[offset++] = INSTRUCTION_INITIALIZE;
+        entrypointAuthority.toBuffer().copy(data, offset); offset += 32;
+        data[offset++] = maxTreeDepth;
+        assetMint.toBuffer().copy(data, offset);
 
         return new TransactionInstruction({
             keys: [
@@ -146,11 +165,12 @@ class TestHelpers {
 
     // Create deposit instruction
     createDepositInstruction(poolAccount, depositorAccount, depositor, commitmentHash, label, value) {
-        const data = Buffer.alloc(1 + 32 + 32 + 8);
-        data[0] = INSTRUCTION_DEPOSIT;
-        commitmentHash.copy(data, 1);
-        label.copy(data, 33);
-        data.writeBigUInt64LE(BigInt(value), 65);
+        const data = Buffer.alloc(1 + 32 + 8 + 32); // instruction + depositor + value + precommitment_hash
+        let offset = 0;
+        data[offset++] = INSTRUCTION_DEPOSIT;
+        depositor.toBuffer().copy(data, offset); offset += 32;
+        data.writeBigUInt64LE(BigInt(value), offset); offset += 8;
+        commitmentHash.copy(data, offset);
 
         return new TransactionInstruction({
             keys: [

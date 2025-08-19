@@ -1,7 +1,7 @@
 const snarkjs = require('snarkjs');
 const fs = require('fs');
 const path = require('path');
-const { poseidon2 } = require('circomlibjs');
+const { buildPoseidon } = require('circomlibjs');
 const { toBigIntBE, toBufferBE } = require('bigint-buffer');
 
 // Convert endianness for Solana compatibility
@@ -68,8 +68,20 @@ function encodeG2ForSolana(point) {
 
 class ProofGenerator {
     constructor() {
-        this.poseidon = poseidon2;
+        this.poseidon = null;
         this.circuitPaths = {};
+        this._initPoseidon();
+    }
+    
+    async _initPoseidon() {
+        this.poseidon = await buildPoseidon();
+    }
+    
+    async ensurePoseidon() {
+        if (!this.poseidon) {
+            await this._initPoseidon();
+        }
+        return this.poseidon;
     }
 
     // Load circuit files
@@ -92,13 +104,15 @@ class ProofGenerator {
     }
 
     // Generate commitment using Poseidon
-    generateCommitment(label, secret, value) {
+    async generateCommitment(label, secret, value) {
+        const poseidon = await this.ensurePoseidon();
+        
         const labelBn = toBigIntBE(label);
         const secretBn = toBigIntBE(secret);
         const valueBn = BigInt(value);
         
         // Commitment = Poseidon(label, secret, value)
-        const commitment = this.poseidon([labelBn, secretBn, valueBn]);
+        const commitment = poseidon([labelBn, secretBn, valueBn]);
         
         return {
             hash: bigIntToBuffer32(commitment),
@@ -109,12 +123,14 @@ class ProofGenerator {
     }
 
     // Generate nullifier using Poseidon
-    generateNullifier(commitmentHash, secret) {
+    async generateNullifier(commitmentHash, secret) {
+        const poseidon = await this.ensurePoseidon();
+        
         const commitmentBn = toBigIntBE(commitmentHash);
         const secretBn = toBigIntBE(secret);
         
         // Nullifier = Poseidon(commitment, secret)
-        const nullifier = this.poseidon([commitmentBn, secretBn]);
+        const nullifier = poseidon([commitmentBn, secretBn]);
         
         return bigIntToBuffer32(nullifier);
     }
@@ -192,9 +208,9 @@ class ProofGenerator {
             publicSignals: [
                 bigIntToBuffer32(BigInt(input.value)),
                 input.label,
-                this.generateCommitment(input.label, input.secret, input.value).hash,
-                this.generateNullifier(
-                    this.generateCommitment(input.label, input.secret, input.value).hash,
+                (await this.generateCommitment(input.label, input.secret, input.value)).hash,
+                await this.generateNullifier(
+                    (await this.generateCommitment(input.label, input.secret, input.value)).hash,
                     input.secret
                 ),
             ],
