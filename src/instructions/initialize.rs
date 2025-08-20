@@ -6,10 +6,10 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::state::zero_copy::PrivacyPoolStateZC;
+use crate::state::PoolStateLeanIMT;
 use solana_program::keccak;
 
-/// Initialize a new privacy pool using zero-copy accounts
+/// Initialize a new privacy pool using Lean IMT
 pub fn initialize_pool(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -24,15 +24,17 @@ pub fn initialize_pool(
         return Err(ProgramError::MissingRequiredSignature);
     }
     
+    // Note: max_tree_depth is less critical for Lean IMT as it grows dynamically
+    // But we'll still validate it for compatibility
     if max_tree_depth == 0 || max_tree_depth > crate::constants::MAX_TREE_DEPTH {
         msg!("Invalid tree depth");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Get mutable reference to pool state using zero-copy
-    let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
+    let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
     
-    if pool_state.is_initialized() {
+    if pool_state.is_initialized != 0 {
         msg!("Pool already initialized");
         return Err(ProgramError::AccountAlreadyInitialized);
     }
@@ -43,26 +45,18 @@ pub fn initialize_pool(
     hasher.hash(asset_mint.as_ref());
     let scope = hasher.result().to_bytes();
     
+    // For now, use a dummy withdrawal verifier (would be the actual verifier key in production)
+    let withdrawal_verifier = Pubkey::from([0u8; 32]);
+    
     // Initialize pool state
-    pool_state.is_initialized = 1;
-    pool_state.entrypoint_authority.copy_from_slice(entrypoint_authority.as_ref());
-    pool_state.asset_mint.copy_from_slice(asset_mint.as_ref());
-    pool_state.scope = scope;
-    pool_state.nonce = 0;
-    pool_state.dead = 0;
-    pool_state.max_tree_depth = max_tree_depth;
-    pool_state.current_root_index = 0;
+    pool_state.initialize(
+        *authority.key(),
+        asset_mint,
+        entrypoint_authority,
+        withdrawal_verifier,
+        scope,
+    );
     
-    // Initialize merkle tree
-    pool_state.merkle_tree.depth = max_tree_depth;
-    pool_state.merkle_tree.next_index = 0;
-    pool_state.merkle_tree.init_zeros();
-    
-    // Initialize root history with zeros
-    for i in 0..crate::constants::ROOT_HISTORY_SIZE {
-        pool_state.roots[i] = [0u8; 32];
-    }
-    
-    msg!("Pool initialized with max depth {}", max_tree_depth);
+    msg!("Pool initialized with Lean IMT");
     Ok(())
 }

@@ -23,7 +23,19 @@
       "Bash(npm search:*)",
       "Bash(npm test:*)",
       "Bash(npx mocha:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm ls:*)",
+      "Bash(yarn install)",
+      "Bash(curl:*)",
+      "Bash(sudo mv:*)",
+      "Bash(~/bin/circom:*)",
+      "Bash(export PATH=~/bin:$PATH)",
+      "Bash(npm run compile:*)",
+      "Bash(npm run setup:withdraw:*)",
+      "Bash(npx circomkit info:*)",
+      "Bash(npm run test:*)",
+      "Bash(npx snarkjs zkey export verificationkey:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": [],
@@ -31,7 +43,8 @@
       "/home/vitorpy/zk/privacy-pools-core/packages/circuits/circuits",
       "/home/vitorpy/zk/privacy-pools-core/packages/circuits",
       "/tmp/groth16-solana",
-      "/home/vitorpy/zk/privacy-pools-core"
+      "/home/vitorpy/zk/privacy-pools-core",
+      "/home/vitorpy"
     ]
   }
 }

@@ -5,9 +5,9 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::state::zero_copy::{PrivacyPoolStateZC, DepositorStateZC};
+use crate::state::{PoolStateLeanIMT, DepositorStateZC};
 
-/// Make a deposit to the privacy pool using zero-copy accounts
+/// Make a deposit to the privacy pool using Lean IMT
 pub fn deposit(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -31,9 +31,9 @@ pub fn deposit(
         return Err(ProgramError::InvalidArgument);
     }
     
-    let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
+    let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
     
-    if pool_state.is_dead() {
+    if pool_state.is_dead != 0 {
         return Err(ProgramError::InvalidAccountData);
     }
     
@@ -45,9 +45,11 @@ pub fn deposit(
     let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
     let commitment = crate::crypto::poseidon::compute_commitment(value, &label, &precommitment_hash);
     
-    // Update merkle tree in-place
-    pool_state.merkle_tree.insert(commitment)?;
-    pool_state.add_root(pool_state.merkle_tree.root);
+    // Insert commitment into state tree
+    pool_state.insert_state_commitment(commitment)?;
+    
+    // Insert label into ASP tree
+    pool_state.insert_asp_label(label)?;
     
     // Update depositor state using zero-copy
     let depositor_state = DepositorStateZC::from_account_mut(depositor_account)?;
