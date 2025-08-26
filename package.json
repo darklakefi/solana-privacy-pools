@@ -6,7 +6,9 @@
     "build:circuits": "./build-circuits.sh",
     "build:program": "cargo build-sbf --release",
     "build": "./build.sh",
-    "clean": "rm -rf build target"
+    "clean": "rm -rf build target",
+    "test": "cargo test --features test-utils",
+    "test:litesvm": "node tests/privacy-pool.test.js"
   },
   "devDependencies": {
     "circomlib": "^2.0.5",
@@ -15,6 +17,9 @@
   "dependencies": {
     "@zk-kit/lean-imt": "^2.2.4",
     "circomlibjs": "^0.1.7",
-    "ffjavascript": "^0.3.1"
+    "ffjavascript": "^0.3.1",
+    "@solana/web3.js": "^1.91.4",
+    "@solana/spl-token": "^0.4.1",
+    "litesvm": "^0.2.0"
   }
 }

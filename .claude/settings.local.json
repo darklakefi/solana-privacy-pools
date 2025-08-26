@@ -35,7 +35,8 @@
       "Bash(npx circomkit info:*)",
       "Bash(npm run test:*)",
       "Bash(npx snarkjs zkey export verificationkey:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(unset:*)"
     ],
     "deny": [],
     "ask": [],

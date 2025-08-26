@@ -44,9 +44,10 @@ pub fn process_instruction(
         }
         
         PrivacyPoolInstruction::Ragequit {
-            proof_data,
+            value,
         } => {
-            ragequit::ragequit(program_id, accounts, proof_data)
+            // RAGEQUIT: Non-private exit, no ZK proof required
+            ragequit::ragequit(program_id, accounts, value)
         }
         
         PrivacyPoolInstruction::WindDown => {

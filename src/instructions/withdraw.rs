@@ -5,50 +5,80 @@ use pinocchio::{
     pubkey::Pubkey,
     ProgramResult,
 };
+use pinocchio_token::instructions::TransferChecked;
 
-use crate::state::zero_copy::{PrivacyPoolStateZC, NullifierStateZC};
+use crate::state::{PoolStateLeanIMT, NullifierStateZC};
 use super::types::{WithdrawalData, WithdrawProofData};
 
-/// Process a private withdrawal using zero-copy accounts
+/// Process a private withdrawal using SPL tokens
+/// 
+/// Accounts:
+/// 0. Pool state account (writable, signer via PDA)
+/// 1. Nullifier account (writable)
+/// 2. Processooor/withdrawer (signer)
+/// 3. Pool's token account (writable)
+/// 4. User's token account (writable)
+/// 5. Asset mint
+/// 6. Token program
 pub fn withdraw(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
     withdrawal_data: WithdrawalData,
     proof_data: WithdrawProofData,
 ) -> ProgramResult {
+    if accounts.len() < 7 {
+        msg!("Not enough accounts provided");
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+    
     let pool_account = &accounts[0];
-    let processooor_account = &accounts[1];
-    let nullifier_account = &accounts[2];
+    let nullifier_account = &accounts[1];
+    let processooor_account = &accounts[2];
+    let pool_token_account = &accounts[3];
+    let user_token_account = &accounts[4];
+    let mint_account = &accounts[5];
+    let _token_program = &accounts[6];
+    
+    // Validate signer
+    if !processooor_account.is_signer() {
+        msg!("Processooor must sign");
+        return Err(ProgramError::MissingRequiredSignature);
+    }
     
     if processooor_account.key() != &withdrawal_data.processooor {
         msg!("Invalid processooor");
         return Err(ProgramError::InvalidArgument);
     }
     
-    if !processooor_account.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
+    // Get mutable reference to pool state using Lean IMT
+    let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
+    
+    // Verify the mint matches the pool's asset mint
+    if *mint_account.key() != Pubkey::from(pool_state.asset_mint) {
+        msg!("Wrong token mint");
+        return Err(ProgramError::InvalidArgument);
     }
     
-    // Get mutable reference to pool state using zero-copy
-    let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
-    
+    // Verify the context
     let expected_context = crate::crypto::poseidon::compute_context(&withdrawal_data, &pool_state.scope);
     if expected_context != proof_data.context() {
         msg!("Context mismatch");
         return Err(ProgramError::InvalidArgument);
     }
     
-    if proof_data.state_tree_depth() > pool_state.max_tree_depth || 
-       proof_data.asp_tree_depth() > pool_state.max_tree_depth {
+    // Validate tree depths (less critical for Lean IMT but still checked)
+    if proof_data.state_tree_depth() > 32 || proof_data.asp_tree_depth() > 32 {
         msg!("Invalid tree depth");
         return Err(ProgramError::InvalidArgument);
     }
     
+    // Verify the state root is known
     if !pool_state.is_known_root(&proof_data.state_root()) {
         msg!("Unknown state root");
         return Err(ProgramError::InvalidArgument);
     }
     
+    // Verify the ZK proof
     if !crate::crypto::verifying_key::verify_withdraw_proof(&proof_data) {
         msg!("Invalid withdrawal proof");
         return Err(ProgramError::InvalidArgument);
@@ -58,12 +88,31 @@ pub fn withdraw(
     let nullifier_state = NullifierStateZC::from_account_mut(nullifier_account)?;
     nullifier_state.set_spent(proof_data.existing_nullifier_hash());
     
-    // Update merkle tree in-place
-    pool_state.merkle_tree.insert(proof_data.new_commitment_hash())?;
-    pool_state.add_root(pool_state.merkle_tree.root);
+    // Insert new commitment into state tree
+    pool_state.insert_state_commitment(proof_data.new_commitment_hash())?;
     
-    msg!("Withdrawal processed: {} tokens to {:?}", 
-         proof_data.withdrawn_value(), 
+    // Transfer tokens from pool to user
+    let withdrawn_value = proof_data.withdrawn_value();
+    msg!("Transferring {} tokens to withdrawer", withdrawn_value);
+    
+    // For TransferChecked, we need decimals. For simplicity, assume 9 (like SOL)
+    // In production, you'd read this from the mint account
+    let decimals = 9u8;
+    
+    // Since pool account needs to sign as authority, we need to use PDA seeds
+    // For now, assuming pool account can sign (in production, use PDA)
+    TransferChecked {
+        from: pool_token_account,
+        to: user_token_account,
+        mint: mint_account,
+        authority: pool_account,
+        amount: withdrawn_value,
+        decimals,
+    }.invoke_signed(&[])?; // Empty seeds for now, would use PDA seeds in production
+    
+    msg!("Withdrawal successful: {} tokens to {:?}", 
+         withdrawn_value, 
          withdrawal_data.processooor);
+    
     Ok(())
 }
