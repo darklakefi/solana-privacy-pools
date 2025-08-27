@@ -17,5 +17,10 @@ Thumbs.db
 *.tmp
 *.log
 
+# Solana test validator
+test-ledger/
+.anchor/
+validator.log
+
 # Keep build artifacts and trusted setup
 # /build and /trusted-setup are intentionally NOT ignored

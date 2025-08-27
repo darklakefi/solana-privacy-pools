@@ -1,10 +1,10 @@
 use pinocchio::{
     account_info::AccountInfo,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
 };
+use pinocchio_log::log;
 use pinocchio_token::instructions::TransferChecked;
 
 use crate::state::{PoolStateLeanIMT, NullifierStateZC};
@@ -27,7 +27,7 @@ pub fn withdraw(
     proof_data: WithdrawProofData,
 ) -> ProgramResult {
     if accounts.len() < 7 {
-        msg!("Not enough accounts provided");
+        log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
@@ -41,12 +41,12 @@ pub fn withdraw(
     
     // Validate signer
     if !processooor_account.is_signer() {
-        msg!("Processooor must sign");
+        log!("Processooor must sign");
         return Err(ProgramError::MissingRequiredSignature);
     }
     
     if processooor_account.key() != &withdrawal_data.processooor {
-        msg!("Invalid processooor");
+        log!("Invalid processooor");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -55,32 +55,32 @@ pub fn withdraw(
     
     // Verify the mint matches the pool's asset mint
     if *mint_account.key() != Pubkey::from(pool_state.asset_mint) {
-        msg!("Wrong token mint");
+        log!("Wrong token mint");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Verify the context
     let expected_context = crate::crypto::poseidon::compute_context(&withdrawal_data, &pool_state.scope);
     if expected_context != proof_data.context() {
-        msg!("Context mismatch");
+        log!("Context mismatch");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Validate tree depths (less critical for Lean IMT but still checked)
     if proof_data.state_tree_depth() > 32 || proof_data.asp_tree_depth() > 32 {
-        msg!("Invalid tree depth");
+        log!("Invalid tree depth");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Verify the state root is known
     if !pool_state.is_known_root(&proof_data.state_root()) {
-        msg!("Unknown state root");
+        log!("Unknown state root");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Verify the ZK proof
     if !crate::crypto::verifying_key::verify_withdraw_proof(&proof_data) {
-        msg!("Invalid withdrawal proof");
+        log!("Invalid withdrawal proof");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -93,7 +93,7 @@ pub fn withdraw(
     
     // Transfer tokens from pool to user
     let withdrawn_value = proof_data.withdrawn_value();
-    msg!("Transferring {} tokens to withdrawer", withdrawn_value);
+    log!("Transferring tokens to withdrawer");
     
     // For TransferChecked, we need decimals. For simplicity, assume 9 (like SOL)
     // In production, you'd read this from the mint account
@@ -110,9 +110,7 @@ pub fn withdraw(
         decimals,
     }.invoke_signed(&[])?; // Empty seeds for now, would use PDA seeds in production
     
-    msg!("Withdrawal successful: {} tokens to {:?}", 
-         withdrawn_value, 
-         withdrawal_data.processooor);
+    log!("Withdrawal successful");
     
     Ok(())
 }

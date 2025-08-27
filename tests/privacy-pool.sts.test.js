@@ -1,4 +1,4 @@
-const { LiteSVM } = require('litesvm');
+// Using solana-test-validator instead of LiteSVM
 const { 
     Keypair, 
     PublicKey, 
@@ -6,7 +6,9 @@ const {
     TransactionInstruction,
     SystemProgram,
     ComputeBudgetProgram,
-    LAMPORTS_PER_SOL 
+    LAMPORTS_PER_SOL,
+    Connection,
+    sendAndConfirmTransaction,
 } = require('@solana/web3.js');
 const {
     TOKEN_PROGRAM_ID,
@@ -15,7 +17,6 @@ const {
     createAssociatedTokenAccountInstruction,
     createSyncNativeInstruction,
     createCloseAccountInstruction,
-    AccountLayout,
 } = require('@solana/spl-token');
 const fs = require('fs');
 const path = require('path');
@@ -27,71 +28,62 @@ const snarkjs = require('snarkjs');
 // WSOL mint address (Native SOL wrapped as SPL token)
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 
-/**
- * Creates token account data for manual account creation
- */
-function createTokenAccountData(mint, owner, amount) {
-    const buffer = Buffer.alloc(AccountLayout.span);
-    AccountLayout.encode({
-        mint: mint,
-        owner: owner,
-        amount: BigInt(amount),
-        delegateOption: 0,
-        delegate: PublicKey.default,
-        state: 1, // Initialized
-        isNativeOption: mint.equals(WSOL_MINT) ? 1 : 0,
-        isNative: BigInt(amount),
-        delegatedAmount: BigInt(0),
-        closeAuthorityOption: 0,
-        closeAuthority: PublicKey.default,
-    }, buffer);
-    return buffer;
-}
 
 /**
- * Manually creates a token account in LiteSVM
+ * Creates a token account using SPL Token instructions
  */
-function createTokenAccount(svm, accountPubkey, mint, owner, amount) {
-    const tokenData = createTokenAccountData(mint, owner, amount);
-    const rentLamports = 2039280; // Minimum rent for token account
+async function createTokenAccount(connection, payer, mint, owner) {
+    const { createAccount, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = require('@solana/spl-token');
     
-    svm.setAccount(accountPubkey, {
-        data: tokenData,
-        owner: TOKEN_PROGRAM_ID,
-        lamports: BigInt(amount) + BigInt(rentLamports),
-        executable: false,
-    });
+    // Get or create associated token account
+    const tokenAccount = await getAssociatedTokenAddress(mint, owner);
     
-    return accountPubkey;
+    // Check if account exists
+    const accountInfo = await connection.getAccountInfo(tokenAccount);
+    if (!accountInfo) {
+        // Create the account
+        const tx = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+                payer.publicKey,
+                tokenAccount,
+                owner,
+                mint
+            )
+        );
+        
+        await sendAndConfirmTransaction(connection, tx, [payer]);
+    }
+    
+    return tokenAccount;
 }
 
 /**
  * Creates a WSOL account with the specified amount
  */
-function wrapSOL(svm, owner, amountLamports) {
-    // Generate a new keypair for the token account
-    const tokenAccount = Keypair.generate();
+async function wrapSOL(connection, owner, amountLamports) {
+    const { createSyncNativeInstruction } = require('@solana/spl-token');
     
-    // Create the token account with WSOL
-    createTokenAccount(svm, tokenAccount.publicKey, WSOL_MINT, owner.publicKey, amountLamports);
+    // Create WSOL token account
+    const tokenAccount = await createTokenAccount(connection, owner, WSOL_MINT, owner.publicKey);
     
-    // Deduct SOL from owner's account
-    const ownerAccount = svm.getAccount(owner.publicKey);
-    if (ownerAccount) {
-        const newLamports = BigInt(ownerAccount.lamports) - BigInt(amountLamports) - BigInt(2039280);
-        svm.setAccount(owner.publicKey, {
-            ...ownerAccount,
-            lamports: newLamports
-        });
-    }
+    // Transfer SOL to the token account and sync
+    const tx = new Transaction()
+        .add(SystemProgram.transfer({
+            fromPubkey: owner.publicKey,
+            toPubkey: tokenAccount,
+            lamports: amountLamports,
+        }))
+        .add(createSyncNativeInstruction(tokenAccount));
     
-    return tokenAccount.publicKey;
+    await sendAndConfirmTransaction(connection, tx, [owner]);
+    
+    return tokenAccount;
 }
 
 /**
  * Unwraps WSOL back to SOL
  */
-async function unwrapSOL(svm, payer, wsolAccount = null) {
+async function unwrapSOL(connection, payer, wsolAccount = null) {
     if (!wsolAccount) {
         wsolAccount = await getAssociatedTokenAddress(WSOL_MINT, payer.publicKey);
     }
@@ -101,32 +93,23 @@ async function unwrapSOL(svm, payer, wsolAccount = null) {
     );
     
     const tx = new Transaction().add(closeIx);
-    tx.recentBlockhash = svm.latestBlockhash();
-    tx.feePayer = payer.publicKey;
-    tx.sign(payer);
     
-    const result = svm.sendTransaction(tx);
-    if (result.error) {
-        throw new Error(`Failed to unwrap SOL: ${result.error}`);
-    }
-    return result;
+    await sendAndConfirmTransaction(connection, tx, [payer]);
+    return true;
 }
 
 /**
  * Gets token balance for an account
  */
-function getTokenBalance(svm, tokenAccount) {
-    const accountInfo = svm.getAccount(tokenAccount);
-    if (!accountInfo) return 0n;
+async function getTokenBalance(connection, tokenAccount) {
+    const { getAccount } = require('@solana/spl-token');
     
-    const data = accountInfo.data;
-    if (data.length < 72) return 0n;
-    
-    let amount = 0n;
-    for (let i = 0; i < 8; i++) {
-        amount |= BigInt(data[64 + i]) << BigInt(8 * i);
+    try {
+        const account = await getAccount(connection, tokenAccount);
+        return BigInt(account.amount);
+    } catch (error) {
+        return 0n;
     }
-    return amount;
 }
 
 // ============ CONSTANTS ============
@@ -151,21 +134,45 @@ async function main() {
     };
     console.log('   ✅ Poseidon hash function ready');
     
-    // ============ 2. SETUP LITESVM ============
-    console.log('\n2. Setting up LiteSVM environment...');
-    const svm = new LiteSVM().withSplPrograms();
+    // ============ 2. SETUP TEST VALIDATOR ============
+    console.log('\n2. Setting up Solana test validator...');
+    console.log('   Make sure solana-test-validator is running!');
+    console.log('   Run: solana-test-validator --reset');
     
-    // Load program
+    // Connect to local test validator
+    const connection = new Connection('http://127.0.0.1:8899', 'confirmed');
+    
+    // Wait for connection
+    try {
+        const version = await connection.getVersion();
+        console.log('   ✅ Connected to test validator:', version['solana-core']);
+    } catch (error) {
+        console.error('   ❌ Failed to connect to test validator');
+        console.error('   Please run: solana-test-validator --reset');
+        process.exit(1);
+    }
+    
+    // Load program keypair
+    const programKeypairPath = path.join(__dirname, '../target/deploy/solana_privacy_pools-keypair.json');
     const programPath = path.join(__dirname, '../target/deploy/solana_privacy_pools.so');
+    
     if (!fs.existsSync(programPath)) {
         console.error('   ❌ Program not found. Run: cargo build-sbf');
         process.exit(1);
     }
     
-    const programBytes = fs.readFileSync(programPath);
-    const programKeypair = Keypair.generate();
-    svm.addProgram(programKeypair.publicKey, programBytes);
-    console.log('   ✅ Program deployed:', programKeypair.publicKey.toString());
+    let programKeypair;
+    if (fs.existsSync(programKeypairPath)) {
+        const keypairData = JSON.parse(fs.readFileSync(programKeypairPath, 'utf-8'));
+        programKeypair = Keypair.fromSecretKey(new Uint8Array(keypairData));
+    } else {
+        programKeypair = Keypair.generate();
+        // Save keypair for future use
+        fs.writeFileSync(programKeypairPath, JSON.stringify(Array.from(programKeypair.secretKey)));
+    }
+    console.log('   Program ID:', programKeypair.publicKey.toString());
+    console.log('   ℹ️  Start validator with:');
+    console.log(`   solana-test-validator --reset --bpf-program ${programKeypair.publicKey.toString()} ${programPath}`);
     
     // Create test accounts
     const authority = Keypair.generate();
@@ -174,10 +181,14 @@ async function main() {
     const user3 = Keypair.generate();
     
     // Fund accounts
-    svm.airdrop(authority.publicKey, BigInt(100 * LAMPORTS_PER_SOL));
-    svm.airdrop(user1.publicKey, BigInt(100 * LAMPORTS_PER_SOL));
-    svm.airdrop(user2.publicKey, BigInt(100 * LAMPORTS_PER_SOL));
-    svm.airdrop(user3.publicKey, BigInt(100 * LAMPORTS_PER_SOL));
+    console.log('   Funding accounts...');
+    await connection.requestAirdrop(authority.publicKey, 100 * LAMPORTS_PER_SOL);
+    await connection.requestAirdrop(user1.publicKey, 100 * LAMPORTS_PER_SOL);
+    await connection.requestAirdrop(user2.publicKey, 100 * LAMPORTS_PER_SOL);
+    await connection.requestAirdrop(user3.publicKey, 100 * LAMPORTS_PER_SOL);
+    
+    // Wait for airdrops to be confirmed
+    await new Promise(resolve => setTimeout(resolve, 1000));
     console.log('   ✅ Accounts funded');
     
     // ============ 3. CREATE TOKEN ACCOUNTS ============
@@ -185,12 +196,11 @@ async function main() {
     
     // Create pool account
     const poolAccount = Keypair.generate();
-    const poolRent = svm.minimumBalanceForRentExemption(BigInt(POOL_STATE_SIZE));
+    const poolRent = await connection.getMinimumBalanceForRentExemption(POOL_STATE_SIZE);
     
-    // Create pool's WSOL token account manually
-    const poolTokenAccount = Keypair.generate();
-    createTokenAccount(svm, poolTokenAccount.publicKey, WSOL_MINT, poolAccount.publicKey, 0);
-    console.log('   ✅ Pool token account created manually');
+    // Create pool's WSOL token account
+    const poolTokenAccount = await createTokenAccount(connection, authority, WSOL_MINT, poolAccount.publicKey);
+    console.log('   ✅ Pool token account created');
     
     // ============ 4. INITIALIZE PRIVACY POOL ============
     console.log('\n4. Initializing Privacy Pool with WSOL...');
@@ -214,7 +224,7 @@ async function main() {
         keys: [
             { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
             { pubkey: authority.publicKey, isSigner: true, isWritable: false },
-            { pubkey: poolTokenAccount.publicKey, isSigner: false, isWritable: true },
+            { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
             { pubkey: WSOL_MINT, isSigner: false, isWritable: false },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
         ],
@@ -227,19 +237,20 @@ async function main() {
         .add(createPoolAccountIx)
         .add(initIx);
     
-    initTx.recentBlockhash = svm.latestBlockhash();
-    initTx.feePayer = authority.publicKey;
-    initTx.sign(authority, poolAccount);
     
-    const initResult = svm.sendTransaction(initTx);
-    if (initResult.error) {
-        console.log('   ❌ Pool initialization failed:', initResult.error);
-        console.log('   Logs:', initResult.logs);
+    try {
+        const txSig = await sendAndConfirmTransaction(
+            connection, 
+            initTx, 
+            [authority, poolAccount],
+            { commitment: 'confirmed' }
+        );
+        console.log('   ✅ Pool initialized for WSOL token');
+        console.log('   Transaction:', txSig);
+    } catch (error) {
+        console.log('   ❌ Pool initialization failed:', error.message);
         process.exit(1);
     }
-    console.log('   ✅ Pool initialized for WSOL token');
-    // Force print logs even if empty
-    console.log('   Init logs:', JSON.stringify(initResult));
     
     // ============ 5. WRAP SOL AND DEPOSIT ============
     console.log('\n5. Processing Deposits with WSOL...');
@@ -260,10 +271,10 @@ async function main() {
         // Wrap SOL to WSOL
         const wrapAmount = BigInt(amount * LAMPORTS_PER_SOL);
         console.log(`   ${label}: Creating WSOL account with ${amount} WSOL...`);
-        const userWsolAccount = wrapSOL(svm, user, wrapAmount);
+        const userWsolAccount = await wrapSOL(connection, user, wrapAmount);
         
         // Check balance after wrapping
-        const balanceAfterWrap = getTokenBalance(svm, userWsolAccount);
+        const balanceAfterWrap = await getTokenBalance(connection, userWsolAccount);
         console.log(`   ${label} WSOL balance: ${balanceAfterWrap / BigInt(LAMPORTS_PER_SOL)} WSOL`);
         
         // Prepare deposit data
@@ -278,7 +289,7 @@ async function main() {
         // Create depositor state account
         const depositorState = Keypair.generate();
         depositorStates.push(depositorState);
-        const depositorRent = svm.minimumBalanceForRentExemption(BigInt(DEPOSITOR_STATE_SIZE));
+        const depositorRent = await connection.getMinimumBalanceForRentExemption(DEPOSITOR_STATE_SIZE);
         
         const createDepositorAccountIx = SystemProgram.createAccount({
             fromPubkey: user.publicKey,
@@ -307,7 +318,7 @@ async function main() {
                 { pubkey: depositorState.publicKey, isSigner: false, isWritable: true },
                 { pubkey: user.publicKey, isSigner: true, isWritable: false },
                 { pubkey: userWsolAccount, isSigner: false, isWritable: true },
-                { pubkey: poolTokenAccount.publicKey, isSigner: false, isWritable: true },
+                { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
                 { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
             ],
             programId: programKeypair.publicKey,
@@ -319,22 +330,26 @@ async function main() {
             .add(createDepositorAccountIx)
             .add(depositIx);
         
-        depositTx.recentBlockhash = svm.latestBlockhash();
-        depositTx.feePayer = user.publicKey;
-        depositTx.sign(user, depositorState);
         
-        const depositResult = svm.sendTransaction(depositTx);
-        if (depositResult.error) {
-            console.log(`   ❌ Deposit ${i+1} failed:`, depositResult.error);
-            console.log('   Logs:', depositResult.logs);
-        } else {
+        try {
+            const txSig = await sendAndConfirmTransaction(
+                connection, 
+                depositTx, 
+                [user, depositorState],
+                { commitment: 'confirmed' }
+            );
             console.log(`   ✅ Deposit ${i+1}: ${amount} WSOL from ${label}`);
-            console.log('   Logs:', depositResult.logs || 'No logs returned');
             
             // Check balances after deposit
-            const userBalanceAfter = getTokenBalance(svm, userWsolAccount);
-            const poolBalanceAfter = getTokenBalance(svm, poolTokenAccount.publicKey);
-            console.log(`   ${label} WSOL after deposit: ${userBalanceAfter / BigInt(LAMPORTS_PER_SOL)}, Pool WSOL: ${poolBalanceAfter / BigInt(LAMPORTS_PER_SOL)}`);
+            const userBalanceAfter = await getTokenBalance(connection, userWsolAccount);
+            const poolBalanceAfter = await getTokenBalance(connection, poolTokenAccount);
+            console.log(`   ${label} WSOL after deposit: ${userBalanceAfter / BigInt(LAMPORTS_PER_SOL)}, Pool WSOL: ${poolBalanceAfter / BigInt(LAMPORTS_PER_SOL)}`)
+        } catch (error) {
+            console.log(`   ❌ Deposit ${i+1} failed:`, error.message);
+            if (error.logs) {
+                console.log('   Transaction logs:');
+                error.logs.forEach(log => console.log('     ', log));
+            }
         }
     }
     
@@ -388,24 +403,21 @@ async function main() {
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }))
         .add(windDownIx);
     
-    windDownTx.recentBlockhash = svm.latestBlockhash();
-    windDownTx.feePayer = authority.publicKey;
-    windDownTx.sign(authority);
     
-    const windDownResult = svm.sendTransaction(windDownTx);
-    if (windDownResult.error) {
-        console.log('   ❌ Wind down failed:', windDownResult.error);
-        console.log('   Logs:', windDownResult.logs);
-    } else {
+    try {
+        const txSig = await sendAndConfirmTransaction(
+            connection, 
+            windDownTx, 
+            [authority],
+            { commitment: 'confirmed' }
+        );
         console.log('   ✅ Pool wound down by authority');
-        if (windDownResult.logs && windDownResult.logs.length > 0) {
-            console.log('   Logs:', windDownResult.logs);
-        }
+    } catch (error) {
+        console.log('   ❌ Wind down failed:', error.message);
     }
     
     // Now user1 can ragequit - create a new account for receiving funds
-    const user1RagequitAccount = Keypair.generate();
-    createTokenAccount(svm, user1RagequitAccount.publicKey, WSOL_MINT, user1.publicKey, 0);
+    const user1RagequitAccount = await createTokenAccount(connection, user1, WSOL_MINT, user1.publicKey);
     const ragequitAmount = BigInt(1 * LAMPORTS_PER_SOL);
     
     const ragequitData = Buffer.alloc(9);
@@ -413,7 +425,7 @@ async function main() {
     ragequitData.writeBigUInt64LE(ragequitAmount, 1);
     
     const nullifierState = Keypair.generate();
-    const nullifierRent = svm.minimumBalanceForRentExemption(BigInt(NULLIFIER_STATE_SIZE));
+    const nullifierRent = await connection.getMinimumBalanceForRentExemption(NULLIFIER_STATE_SIZE);
     
     const createNullifierAccountIx = SystemProgram.createAccount({
         fromPubkey: user1.publicKey,
@@ -428,8 +440,8 @@ async function main() {
             { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
             { pubkey: depositorStates[0].publicKey, isSigner: false, isWritable: true },
             { pubkey: user1.publicKey, isSigner: true, isWritable: false },
-            { pubkey: poolTokenAccount.publicKey, isSigner: false, isWritable: true },
-            { pubkey: user1RagequitAccount.publicKey, isSigner: false, isWritable: true },
+            { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: user1RagequitAccount, isSigner: false, isWritable: true },
             { pubkey: WSOL_MINT, isSigner: false, isWritable: false },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
         ],
@@ -442,27 +454,25 @@ async function main() {
         .add(createNullifierAccountIx)
         .add(ragequitIx);
     
-    ragequitTx.recentBlockhash = svm.latestBlockhash();
-    ragequitTx.feePayer = user1.publicKey;
-    ragequitTx.sign(user1, nullifierState);
     
-    const ragequitResult = svm.sendTransaction(ragequitTx);
-    if (ragequitResult.error) {
-        console.log('   ❌ Ragequit failed:', ragequitResult.error);
-        console.log('   Logs:', ragequitResult.logs);
-    } else {
+    try {
+        const txSig = await sendAndConfirmTransaction(
+            connection, 
+            ragequitTx, 
+            [user1, nullifierState],
+            { commitment: 'confirmed' }
+        );
         console.log('   ✅ User 1 successfully rage quit and recovered funds');
-        if (ragequitResult.logs && ragequitResult.logs.length > 0) {
-            console.log('   Logs:', ragequitResult.logs);
-        }
+    } catch (error) {
+        console.log('   ❌ Ragequit failed:', error.message);
     }
     
     // ============ 8. CHECK FINAL STATE ============
     console.log('\n8. Final State Summary...');
     
     // Check token balances
-    const poolWsolFinal = getTokenBalance(svm, poolTokenAccount.publicKey);
-    const user1WsolFinal = getTokenBalance(svm, user1RagequitAccount.publicKey);
+    const poolWsolFinal = await getTokenBalance(connection, poolTokenAccount);
+    const user1WsolFinal = await getTokenBalance(connection, user1RagequitAccount);
     
     console.log(`   Pool WSOL balance: ${poolWsolFinal / BigInt(LAMPORTS_PER_SOL)} WSOL`);
     console.log(`   User 1 WSOL balance: ${user1WsolFinal / BigInt(LAMPORTS_PER_SOL)} WSOL`);
@@ -472,13 +482,13 @@ async function main() {
     console.log('   Note: WSOL unwrap skipped for this test');
     
     // Check SOL balances
-    const authorityBalance = svm.getBalance(authority.publicKey);
-    const user1Balance = svm.getBalance(user1.publicKey);
-    const user2Balance = svm.getBalance(user2.publicKey);
+    const authorityBalance = await connection.getBalance(authority.publicKey);
+    const user1Balance = await connection.getBalance(user1.publicKey);
+    const user2Balance = await connection.getBalance(user2.publicKey);
     
-    console.log(`\n   Authority SOL: ${authorityBalance / BigInt(LAMPORTS_PER_SOL)} SOL`);
-    console.log(`   User 1 SOL: ${user1Balance / BigInt(LAMPORTS_PER_SOL)} SOL`);
-    console.log(`   User 2 SOL: ${user2Balance / BigInt(LAMPORTS_PER_SOL)} SOL`);
+    console.log(`\n   Authority SOL: ${authorityBalance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`   User 1 SOL: ${user1Balance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`   User 2 SOL: ${user2Balance / LAMPORTS_PER_SOL} SOL`);
     
     // ============ TEST SUMMARY ============
     console.log('\n=== Test Summary ===');

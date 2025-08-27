@@ -1,10 +1,10 @@
 use pinocchio::{
     account_info::AccountInfo,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
 };
+use pinocchio_log::log;
 use pinocchio_token::instructions::TransferChecked;
 
 use crate::state::{PoolStateLeanIMT, DepositorStateZC};
@@ -28,7 +28,7 @@ pub fn ragequit(
     value: u64,
 ) -> ProgramResult {
     if accounts.len() < 7 {
-        msg!("Not enough accounts provided");
+        log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
@@ -41,7 +41,7 @@ pub fn ragequit(
     let _token_program = &accounts[6];
     
     if !ragequitter_account.is_signer() {
-        msg!("Ragequitter must sign");
+        log!("Ragequitter must sign");
         return Err(ProgramError::MissingRequiredSignature);
     }
     
@@ -50,25 +50,25 @@ pub fn ragequit(
     
     // Ragequit is typically only allowed when pool is dead
     if pool_state.is_dead == 0 {
-        msg!("Pool is not dead - ragequit not allowed");
+        log!("Pool is not dead - ragequit not allowed");
         return Err(ProgramError::InvalidAccountData);
     }
     
     // Verify depositor
     let depositor_state = DepositorStateZC::from_account_mut(depositor_account)?;
     if &depositor_state.depositor != ragequitter_account.key().as_ref() {
-        msg!("Not original depositor");
+        log!("Not original depositor");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Verify the mint matches the pool's asset mint
     if *mint_account.key() != Pubkey::from(pool_state.asset_mint) {
-        msg!("Wrong token mint");
+        log!("Wrong token mint");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Transfer tokens from pool to user
-    msg!("Ragequit: transferring {} tokens to user", value);
+    log!("Ragequit: transferring tokens to user");
     
     // For TransferChecked, we need decimals. For simplicity, assume 9 (like SOL)
     // In production, you'd read this from the mint account
@@ -86,9 +86,7 @@ pub fn ragequit(
     // Mark depositor state as withdrawn
     depositor_state.label = [0u8; 32]; // Clear the label
     
-    msg!("Ragequit processed: {} tokens to {:?}", 
-         value, 
-         ragequitter_account.key());
+    log!("Ragequit processed successfully");
     
     Ok(())
 }

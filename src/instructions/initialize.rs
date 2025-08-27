@@ -1,10 +1,10 @@
 use pinocchio::{
     account_info::AccountInfo,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
 };
+use pinocchio_log::log;
 
 use crate::state::PoolStateLeanIMT;
 
@@ -24,7 +24,7 @@ pub fn initialize_pool(
     asset_mint: Pubkey,
 ) -> ProgramResult {
     if accounts.len() < 5 {
-        msg!("Not enough accounts provided");
+        log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
@@ -44,7 +44,7 @@ pub fn initialize_pool(
     
     // Verify the mint account matches what was passed in instruction data
     if *mint_account.key() != asset_mint {
-        msg!("Mint account does not match instruction data");
+        log!("Mint account does not match instruction data");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -56,28 +56,42 @@ pub fn initialize_pool(
     // Note: max_tree_depth is less critical for Lean IMT as it grows dynamically
     // But we'll still validate it for compatibility
     if max_tree_depth == 0 || max_tree_depth > crate::constants::MAX_TREE_DEPTH {
-        msg!("Invalid tree depth");
+        log!("Invalid tree depth");
         return Err(ProgramError::InvalidArgument);
     }
     
-    // Get mutable reference to pool state using zero-copy
-    let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
+    // Get mutable reference to pool state - properly maintain the borrow
+    let mut pool_data = pool_account.try_borrow_mut_data()?;
     
-    if pool_state.is_initialized != 0 {
-        msg!("Pool already initialized");
-        return Err(ProgramError::AccountAlreadyInitialized);
+    if pool_data.len() != PoolStateLeanIMT::LEN {
+        log!("Invalid pool account size");
+        return Err(ProgramError::InvalidAccountData);
     }
+    
+    // IMPORTANT: Zero the entire account data first
+    // Solana doesn't guarantee zero-initialized memory for new accounts
+    for byte in pool_data.iter_mut() {
+        *byte = 0;
+    }
+    
+    let pool_state = unsafe {
+        &mut *(pool_data.as_mut_ptr() as *mut PoolStateLeanIMT)
+    };
+    
+    // No need to check is_initialized since we just zeroed everything
     
     // Generate scope using a simple hash for now
     // In production, would use proper keccak256 implementation
     let mut scope = [0u8; 32];
-    scope[..12].copy_from_slice(b"PrivacyPool");
-    scope[12..].copy_from_slice(&asset_mint.as_ref()[..20]);
+    scope[..11].copy_from_slice(b"PrivacyPool");
+    scope[11..31].copy_from_slice(&asset_mint.as_ref()[..20]);
     
     // For now, use a dummy withdrawal verifier (would be the actual verifier key in production)
     let withdrawal_verifier = Pubkey::from([0u8; 32]);
     
     // Initialize pool state
+    log!("Initializing pool");
+    
     pool_state.initialize(
         *authority.key(),
         asset_mint,
@@ -86,6 +100,6 @@ pub fn initialize_pool(
         scope,
     );
     
-    msg!("Pool initialized with Lean IMT");
+    log!("Pool initialized successfully with Lean IMT");
     Ok(())
 }

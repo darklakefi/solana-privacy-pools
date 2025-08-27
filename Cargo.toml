@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 pinocchio = "0.6"
 pinocchio-token = "0.1"
+pinocchio-log = "0.1"
 groth16-solana = "0.0.1"
 poseidon-ark = { path = "../poseidon-ark" }
 solana-program = "1.18"

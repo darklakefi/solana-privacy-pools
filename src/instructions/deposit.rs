@@ -3,8 +3,8 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
-    msg,
 };
+use pinocchio_log::log;
 use pinocchio_token::instructions::Transfer;
 
 use crate::state::{PoolStateLeanIMT, DepositorStateZC};
@@ -26,7 +26,7 @@ pub fn deposit(
     precommitment_hash: [u8; 32],
 ) -> ProgramResult {
     if accounts.len() < 6 {
-        msg!("Not enough accounts provided");
+        log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
@@ -39,37 +39,51 @@ pub fn deposit(
     
     // Validate signer
     if !depositor_signer.is_signer() {
-        msg!("Depositor must sign");
+        log!("Depositor must sign");
         return Err(ProgramError::MissingRequiredSignature);
     }
     
     if depositor_signer.key() != &depositor {
-        msg!("Invalid depositor");
+        log!("Invalid depositor");
         return Err(ProgramError::InvalidArgument);
     }
     
-    // Get pool state
-    let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
+    // Get pool state - properly maintain the borrow
+    let mut pool_data = pool_account.try_borrow_mut_data()?;
+    
+    if pool_data.len() != PoolStateLeanIMT::LEN {
+        log!("Invalid pool account size");
+        return Err(ProgramError::InvalidAccountData);
+    }
+    
+    // Debug: Check nonce before modification
+    let nonce_before = u64::from_le_bytes(pool_data[168..176].try_into().unwrap());
+    log!("Nonce before modification: {}", nonce_before);
+    
+    // Cast to our state structure
+    let pool_state = unsafe {
+        &mut *(pool_data.as_mut_ptr() as *mut PoolStateLeanIMT)
+    };
+    
+    log!("Deposit: Pool state loaded, current nonce={}", pool_state.nonce);
     
     if pool_state.is_dead != 0 {
-        msg!("Pool is dead");
+        log!("Pool is dead");
         return Err(ProgramError::InvalidAccountData);
     }
     
     // Validate value
     if value == 0 {
-        msg!("Cannot deposit zero");
+        log!("Cannot deposit zero");
         return Err(ProgramError::InvalidArgument);
     }
     
     if value >= u128::MAX as u64 {
-        msg!("Value too large");
+        log!("Value too large");
         return Err(ProgramError::InvalidArgument);
     }
     
     // Transfer tokens from user to pool using pinocchio-token
-    msg!("Transferring {} tokens to pool", value);
-    
     Transfer {
         from: user_token_account,
         to: pool_token_account,
@@ -77,24 +91,61 @@ pub fn deposit(
         amount: value,
     }.invoke()?;
     
-    msg!("Token transfer successful");
-    
     // Generate label and commitment
-    let nonce = pool_state.increment_nonce();
+    // Increment nonce directly in buffer to ensure persistence
+    let nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
+    // Also update the struct field to keep it in sync
+    pool_state.nonce = nonce;
+    log!("Deposit: Using nonce={}", nonce);
+    
+    log!("Computing label...");
     let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
+    log!("Label computed");
+    
+    log!("Computing commitment...");
     let commitment = crate::crypto::poseidon::compute_commitment(value, &label, &precommitment_hash);
+    log!("Commitment computed, first byte={}", commitment[0]);
     
     // Insert commitment into state tree
+    log!("Inserting into state tree...");
     pool_state.insert_state_commitment(commitment)?;
+    log!("State tree insertion complete");
     
-    // Insert label into ASP tree
+    // Insert label into ASP tree  
+    log!("Inserting into ASP tree...");
     pool_state.insert_asp_label(label)?;
+    log!("ASP tree insertion complete");
     
     // Update depositor state
-    let depositor_state = DepositorStateZC::from_account_mut(depositor_state_account)?;
-    depositor_state.set(depositor, label);
+    // We need to keep pool_data alive, so work with depositor through raw pointer too
+    {
+        let mut depositor_data = depositor_state_account.try_borrow_mut_data()?;
+        if depositor_data.len() != DepositorStateZC::LEN {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let depositor_state = unsafe {
+            &mut *(depositor_data.as_mut_ptr() as *mut DepositorStateZC)
+        };
+        depositor_state.set(depositor, label);
+        // depositor_data RefMut guard dropped here
+    }
     
-    msg!("Deposit successful. Label: {:?}", label);
+    log!("Deposit successful");
+    
+    // Debug: Check if changes are in the buffer  
+    let nonce_after = u64::from_le_bytes(pool_data[168..176].try_into().unwrap());
+    log!("Nonce in buffer after modifications: {}", nonce_after);
+    
+    // Debug: Check state tree size in buffer
+    // After: is_initialized(1) + padding(7) + 5*pubkeys(160) + scope(32) + nonce(8) + is_dead(1) + padding(7) = 216
+    // Then: roots[64][32] = 2048, current_root_index(8) = 2056
+    // Then state_tree starts at 216 + 2048 + 8 = 2272
+    let state_tree_offset = 216 + (64 * 32) + 8; 
+    let state_tree_size = u64::from_le_bytes(pool_data[state_tree_offset..state_tree_offset+8].try_into().unwrap());
+    log!("State tree size in buffer: {}", state_tree_size);
+    
+    // IMPORTANT: pool_data RefMut guard is dropped here at function end
+    // This ensures all changes to pool_state are persisted
     
     Ok(())
 }

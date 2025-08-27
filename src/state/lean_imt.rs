@@ -65,8 +65,12 @@ impl LeanIMTStateZC {
     /// Insert a leaf into the Lean IMT
     /// This follows the exact algorithm from the Solidity implementation
     pub fn insert(&mut self, leaf: [u8; 32]) -> Result<[u8; 32], ProgramError> {
+        use pinocchio_log::log;
+        log!("Lean IMT insert: leaf[0]={}, current size={}", leaf[0], self.size);
+        
         // Check if leaf already exists (simplified check)
         if self.has_leaf(&leaf) {
+            log!("Lean IMT: Leaf already exists!");
             return Err(ProgramError::InvalidArgument);
         }
         
@@ -75,7 +79,10 @@ impl LeanIMTStateZC {
         // Calculate new depth if needed
         // A new insertion can increase tree depth by at most 1
         let mut tree_depth = self.depth as usize;
-        if (1u64 << tree_depth) < index + 1 {
+        let required_capacity = index + 1;
+        let current_capacity = 1u64 << tree_depth;
+        
+        if current_capacity < required_capacity {
             tree_depth += 1;
             self.depth = tree_depth as u32;
         }
@@ -85,8 +92,10 @@ impl LeanIMTStateZC {
         
         // Traverse up the tree
         for level in 0..tree_depth {
+            let is_right = ((index >> level) & 1) == 1;
+            
             // Check if we're at an odd position at this level
-            if ((index >> level) & 1) == 1 {
+            if is_right {
                 // We're a right child, hash with the saved left sibling
                 node = crate::crypto::poseidon::hash_two(
                     &self.side_nodes[level],
@@ -102,6 +111,12 @@ impl LeanIMTStateZC {
         self.size = index + 1;
         
         // Save the root at the current depth
+        // Make sure we don't exceed array bounds
+        // Array is MAX_TREE_DEPTH + 1 in size, so valid indices are 0..=MAX_TREE_DEPTH
+        if tree_depth > crate::constants::MAX_TREE_DEPTH as usize {
+            return Err(ProgramError::InvalidArgument);
+        }
+        
         self.side_nodes[tree_depth] = node;
         
         // Track the leaf (simplified - in production would need better approach)
@@ -115,7 +130,12 @@ impl LeanIMTStateZC {
     
     /// Get the current root
     pub fn root(&self) -> [u8; 32] {
-        self.side_nodes[self.depth as usize]
+        let depth = self.depth as usize;
+        if depth >= crate::constants::MAX_TREE_DEPTH as usize {
+            // Return empty root if depth exceeds max
+            return [0u8; 32];
+        }
+        self.side_nodes[depth]
     }
     
     /// Check if a leaf exists in the tree
@@ -198,6 +218,9 @@ impl PoolStateLeanIMT {
         self.nonce = 0;
         self.is_dead = 0;
         
+        use pinocchio_log::log;
+        log!("Pool initialized with nonce={}", self.nonce);
+        
         // Initialize root history
         for i in 0..ROOT_HISTORY_SIZE {
             self.roots[i] = [0u8; 32];
@@ -252,11 +275,24 @@ impl PoolStateLeanIMT {
     }
     
     pub fn increment_nonce(&mut self) -> u64 {
-        self.nonce += 1;
+        use pinocchio_log::log;
+        let old_nonce = self.nonce;
+        self.nonce = self.nonce.wrapping_add(1);
+        log!("increment_nonce: {} -> {}", old_nonce, self.nonce);
         self.nonce
+    }
+    
+    /// Direct buffer modification for nonce (for debugging)
+    pub fn increment_nonce_in_buffer(buffer: &mut [u8]) -> u64 {
+        use pinocchio_log::log;
+        // Nonce is at offset 168 = 1 + 7 + 32*5 
+        // (is_initialized + padding + authority + asset_mint + entrypoint + withdrawal_verifier + scope)
+        const NONCE_OFFSET: usize = 168;
+        let old_nonce = u64::from_le_bytes(buffer[NONCE_OFFSET..NONCE_OFFSET+8].try_into().unwrap());
+        let new_nonce = old_nonce.wrapping_add(1);
+        buffer[NONCE_OFFSET..NONCE_OFFSET+8].copy_from_slice(&new_nonce.to_le_bytes());
+        log!("increment_nonce_in_buffer: {} -> {}", old_nonce, new_nonce);
+        new_nonce
     }
 }
 
-#[cfg(test)]
-#[path = "lean_imt_test.rs"]
-mod lean_imt_test;

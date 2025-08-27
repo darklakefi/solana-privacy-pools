@@ -1,10 +1,10 @@
 use pinocchio::{
     account_info::AccountInfo,
-    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
 };
+use pinocchio_log::log;
 
 use crate::state::zero_copy::PrivacyPoolStateZC;
 
@@ -24,17 +24,17 @@ pub fn wind_down(
     let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
     
     if pool_state.get_entrypoint_authority() != *entrypoint_account.key() {
-        msg!("Only entrypoint can wind down pool");
+        log!("Only entrypoint can wind down pool");
         return Err(ProgramError::InvalidArgument);
     }
     
     if pool_state.is_dead() {
-        msg!("Pool already dead");
+        log!("Pool already dead");
         return Err(ProgramError::InvalidAccountData);
     }
     
     pool_state.set_dead(true);
     
-    msg!("Pool wound down");
+    log!("Pool wound down");
     Ok(())
 }

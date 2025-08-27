@@ -8,7 +8,8 @@
     "build": "./build.sh",
     "clean": "rm -rf build target",
     "test": "cargo test --features test-utils",
-    "test:litesvm": "node tests/privacy-pool.test.js"
+    "test:litesvm": "node tests/privacy-pool.test.js",
+    "test:validator": "./test-with-validator.sh"
   },
   "devDependencies": {
     "circomlib": "^2.0.5",

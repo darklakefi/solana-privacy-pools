@@ -69,6 +69,11 @@ let withdrawal_verifier = Pubkey::from([0u8; 32]);
 **Issue:** Uses hardcoded hashes for testing instead of actual cryptographic operations
 **TODO:** Integrate real Poseidon hash and Groth16 verification in production
 
+### ~~8a. Temporary Keccak256 for Poseidon~~ [FIXED]
+**Location:** `src/crypto/poseidon.rs` - `hash_two`, `hash_three`
+**Issue:** poseidon-ark library was using solana_program instead of pinocchio
+**Resolution:** Updated poseidon-ark to use pinocchio's sol_poseidon syscall directly
+
 ## Missing Features
 
 ### 9. Circuit Integration

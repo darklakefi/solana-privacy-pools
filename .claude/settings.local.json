@@ -36,7 +36,11 @@
       "Bash(npm run test:*)",
       "Bash(npx snarkjs zkey export verificationkey:*)",
       "Bash(timeout:*)",
-      "Bash(unset:*)"
+      "Bash(unset:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(pkill:*)",
+      "Bash(solana confirm:*)",
+      "Bash(solana transaction-history:*)"
     ],
     "deny": [],
     "ask": [],
