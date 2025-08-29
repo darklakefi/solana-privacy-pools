@@ -15,7 +15,7 @@ pub enum PrivacyPoolInstruction {
     Deposit {
         depositor: Pubkey,
         value: u64,
-        precommitment_hash: [u8; 32],
+        proof_data: CommitmentProofData,
     },
     Withdraw {
         withdrawal_data: WithdrawalData,
@@ -47,6 +47,17 @@ pub struct RagequitProofData {
     pub proof_b: [u8; 128], 
     pub proof_c: [u8; 64],
     pub public_signals: Vec<[u8; 32]>,
+}
+
+#[derive(Debug)]
+pub struct CommitmentProofData {
+    pub proof_a: [u8; 64],
+    pub proof_b: [u8; 128],
+    pub proof_c: [u8; 64],
+    pub value: [u8; 32],
+    pub label: [u8; 32],
+    pub commitment: [u8; 32],
+    pub nullifier_hash: [u8; 32],
 }
 
 impl WithdrawProofData {
@@ -132,7 +143,8 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 })
             }
             1 => {
-                if data.len() < 1 + 32 + 8 + 32 {
+                // Deposit with proof: 1 + 32 (depositor) + 8 (value) + 64 (proof_a) + 128 (proof_b) + 64 (proof_c) + 32*4 (public signals)
+                if data.len() < 1 + 32 + 8 + 64 + 128 + 64 + 128 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
                 let mut offset = 1;
@@ -146,13 +158,43 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                         .map_err(|_| ProgramError::InvalidInstructionData)?
                 );
                 offset += 8;
-                let precommitment_hash = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                
+                // Parse proof data
+                let proof_a = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                let proof_b = <[u8; 128]>::try_from(&data[offset..offset + 128])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 128;
+                let proof_c = <[u8; 64]>::try_from(&data[offset..offset + 64])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 64;
+                
+                // Parse public signals (4 x 32 bytes)
+                let value_signal = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let label = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let commitment = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let nullifier_hash = <[u8; 32]>::try_from(&data[offset..offset + 32])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 
                 Ok(PrivacyPoolInstruction::Deposit {
                     depositor,
                     value,
-                    precommitment_hash,
+                    proof_data: CommitmentProofData {
+                        proof_a,
+                        proof_b,
+                        proof_c,
+                        value: value_signal,
+                        label,
+                        commitment,
+                        nullifier_hash,
+                    },
                 })
             }
             2 => {

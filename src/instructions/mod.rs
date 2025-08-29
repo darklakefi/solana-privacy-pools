@@ -31,9 +31,9 @@ pub fn process_instruction(
         PrivacyPoolInstruction::Deposit {
             depositor,
             value,
-            precommitment_hash,
+            proof_data,
         } => {
-            deposit::deposit(program_id, accounts, depositor, value, precommitment_hash)
+            deposit::deposit(program_id, accounts, depositor, value, proof_data)
         }
         
         PrivacyPoolInstruction::Withdraw {

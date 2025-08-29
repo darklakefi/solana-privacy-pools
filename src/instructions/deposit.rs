@@ -8,8 +8,9 @@ use pinocchio_log::log;
 use pinocchio_token::instructions::Transfer;
 
 use crate::state::{PoolStateLeanIMT, DepositorStateZC};
+use crate::instructions::CommitmentProofData;
 
-/// Make a deposit to the privacy pool using SPL tokens
+/// Make a deposit to the privacy pool using SPL tokens with ZK proof
 /// 
 /// Accounts:
 /// 0. Pool state account (writable)
@@ -23,7 +24,7 @@ pub fn deposit(
     accounts: &[AccountInfo],
     depositor: Pubkey,
     value: u64,
-    precommitment_hash: [u8; 32],
+    proof_data: CommitmentProofData,
 ) -> ProgramResult {
     if accounts.len() < 6 {
         log!("Not enough accounts provided");
@@ -81,6 +82,48 @@ pub fn deposit(
         return Err(ProgramError::InvalidArgument);
     }
     
+    // Increment nonce for label generation
+    let nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
+    // Also update the struct field to keep it in sync
+    pool_state.nonce = nonce;
+    
+    // Generate label (must match what the circuit expects)
+    let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
+    
+    // Convert label to bytes for proof verification
+    let label_bytes = {
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&label);
+        bytes
+    };
+    
+    // Verify the proof data matches our expected values
+    if proof_data.label != label_bytes {
+        log!("Label mismatch in proof");
+        return Err(ProgramError::InvalidArgument);
+    }
+    
+    // Convert value to bytes for verification
+    let value_bytes = {
+        let mut bytes = [0u8; 32];
+        bytes[..8].copy_from_slice(&value.to_le_bytes());
+        bytes
+    };
+    
+    if proof_data.value != value_bytes {
+        log!("Value mismatch in proof");
+        return Err(ProgramError::InvalidArgument);
+    }
+    
+    // Verify the commitment proof
+    if !crate::crypto::verifying_key::verify_commitment_proof(&proof_data) {
+        log!("Invalid commitment proof");
+        return Err(ProgramError::InvalidArgument);
+    }
+    
+    // Extract the commitment from the proof (already verified)
+    let commitment = proof_data.commitment;
+    
     // Transfer tokens from user to pool using pinocchio-token
     Transfer {
         from: user_token_account,
@@ -88,15 +131,6 @@ pub fn deposit(
         authority: depositor_signer,
         amount: value,
     }.invoke()?;
-    
-    // Generate label and commitment
-    // Increment nonce directly in buffer to ensure persistence
-    let nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
-    // Also update the struct field to keep it in sync
-    pool_state.nonce = nonce;
-    
-    let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
-    let commitment = crate::crypto::poseidon::compute_commitment(value, &label, &precommitment_hash);
     
     // Insert commitment into state tree
     pool_state.insert_state_commitment(commitment)?;

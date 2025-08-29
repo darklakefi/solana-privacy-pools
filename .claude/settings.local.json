@@ -40,7 +40,8 @@
       "WebFetch(domain:github.com)",
       "Bash(pkill:*)",
       "Bash(solana confirm:*)",
-      "Bash(solana transaction-history:*)"
+      "Bash(solana transaction-history:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": [],
