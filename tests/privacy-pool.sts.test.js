@@ -12,18 +12,13 @@ const {
 } = require('@solana/web3.js');
 const {
     TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
-    createAssociatedTokenAccountInstruction,
-    createSyncNativeInstruction,
-    createCloseAccountInstruction,
 } = require('@solana/spl-token');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { buildPoseidon } = require('circomlibjs');
-const { LeanIMT } = require('@zk-kit/lean-imt');
-const snarkjs = require('snarkjs');
+
 
 // ============ TOKEN HELPER FUNCTIONS ============
 // WSOL mint address (Native SOL wrapped as SPL token)

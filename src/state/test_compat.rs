@@ -7,7 +7,6 @@ use pinocchio::{
 use crate::{BorshSerialize, BorshDeserialize};
 use crate::constants::{ROOT_HISTORY_SIZE, MAX_TREE_DEPTH};
 use crate::crypto::poseidon;
-use solana_program::keccak;
 
 /// Test-compatible version of PrivacyPoolState
 #[derive(Debug)]
@@ -65,10 +64,10 @@ impl PrivacyPoolState {
     }
     
     fn generate_scope(asset_mint: &Pubkey) -> [u8; 32] {
-        let mut hasher = keccak::Hasher::default();
-        hasher.hash(b"PrivacyPool");
-        hasher.hash(asset_mint.as_ref());
-        hasher.result().to_bytes()
+        use pinocchio::syscalls::sol_keccak256;
+        let mut scope = [0u8; 32];
+        sol_keccak256(&[b"PrivacyPool", asset_mint.as_ref()], &mut scope);
+        scope
     }
     
     pub fn is_known_root(&self, root: &[u8; 32]) -> bool {

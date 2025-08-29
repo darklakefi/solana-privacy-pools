@@ -32,10 +32,19 @@ fn compute_verifier_key_hash() -> Pubkey {
         vk_data.extend_from_slice(ic_point);
     }
     
+    log!("compute_verifier_key_hash: vk_data.len() = {}", vk_data.len() as u64);
+    
     // Hash the entire verifying key
+    // sol_keccak256 expects array of slices
+    let slice: [&[u8]; 1] = [vk_data.as_slice()];
+    
     let mut hash = [0u8; 32];
     unsafe {
-        sol_keccak256(vk_data.as_ptr(), vk_data.len() as u64, hash.as_mut_ptr());
+        sol_keccak256(
+            slice.as_ptr() as *const u8,
+            slice.len() as u64,
+            hash.as_mut_ptr()
+        );
     }
     
     Pubkey::from(hash)
@@ -78,25 +87,34 @@ pub fn initialize_pool(
     // Verify the pool account was created with the correct seed
     // Use "ps-" + first 29 chars of base58 mint address
     // We need to use base58 to match JavaScript
+    log!("Initialize: About to encode mint address");
+    
     extern crate alloc;
     use alloc::format;
-    use alloc::string::String;
     
     // Encode mint as base58 and take first 29 chars
+    log!("Initialize: Starting bs58 encode");
     let mint_base58 = bs58::encode(asset_mint.as_ref()).into_string();
-    let seed = format!("ps-{}", &mint_base58[..29.min(mint_base58.len())]);
+    log!("Initialize: bs58 encode complete");
     
+    log!("Initialize: Creating seed string");
+    let seed = format!("ps-{}", &mint_base58[..29.min(mint_base58.len())]);
+    log!("Initialize: Seed string created");
+    
+    log!("Initialize: Creating expected pool address");
     let expected_pool_address = pinocchio::pubkey::create_with_seed(
         authority.key(),
         seed.as_bytes(),
         program_id
     )?;
+    log!("Initialize: Expected pool address created");
     
     // Verify the pool account is at the expected address
     if pool_account.key() != &expected_pool_address {
         log!("Invalid pool account - doesn't match expected seed derivation");
         return Err(ProgramError::InvalidArgument);
     }
+    log!("Initialize: Pool account address verified");
     
     // Verify the mint account matches what was passed in instruction data
     if *mint_account.key() != asset_mint {
@@ -136,27 +154,45 @@ pub fn initialize_pool(
     }
     
     // Get mutable reference to pool state
+    log!("Initialize: Getting mutable reference to pool data");
     let mut pool_data = pool_account.try_borrow_mut_data()?;
     
     log!("Initialize: Pool data len = {}", pool_data.len() as u64);
     
+    log!("Initialize: Casting to PoolStateLeanIMT");
     let pool_state = unsafe {
         &mut *(pool_data.as_mut_ptr() as *mut PoolStateLeanIMT)
     };
+    log!("Initialize: Cast complete");
     
     // Generate scope using keccak256 hash of PrivacyPool prefix and asset mint
-    let mut scope_data = Vec::with_capacity(43);
-    scope_data.extend_from_slice(b"PrivacyPool");
-    scope_data.extend_from_slice(asset_mint.as_ref());
+    log!("Initialize: Creating scope data slices");
     
+    // sol_keccak256 expects an array of byte slices (fat pointers)
+    let prefix = b"PrivacyPool";
+    let mint_bytes = asset_mint.as_ref();
+    
+    // Create array of slices - each slice is a fat pointer (ptr + len)
+    let slices: [&[u8]; 2] = [prefix, mint_bytes];
+    
+    log!("Initialize: Scope data slices created");
+    
+    log!("Initialize: Computing keccak256 for scope");
     let mut scope = [0u8; 32];
     unsafe {
-        sol_keccak256(scope_data.as_ptr(), scope_data.len() as u64, scope.as_mut_ptr());
+        sol_keccak256(
+            slices.as_ptr() as *const u8,
+            slices.len() as u64,
+            scope.as_mut_ptr()
+        );
     }
+    log!("Initialize: Scope computed");
     
     // Compute withdrawal verifier key hash from the actual verifying key constants
     // This creates a unique identifier for the withdraw circuit's verifying key
+    log!("Initialize: Computing verifier key hash");
     let withdrawal_verifier = compute_verifier_key_hash();
+    log!("Initialize: Verifier key hash computed");
     
     // Initialize pool state
     log!("Initializing pool");
