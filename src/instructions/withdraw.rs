@@ -9,37 +9,39 @@ use pinocchio_token::{instructions::TransferChecked, state::Mint};
 
 use crate::state::{PoolStateLeanIMT, NullifierStateZC};
 use super::types::{WithdrawalData, WithdrawProofData};
-use crate::constants::{POOL_PDA_SEED};
+use crate::constants::{VAULT_PDA_SEED};
 use pinocchio::instruction::{Seed, Signer};
 
 /// Process a private withdrawal using SPL tokens
 /// 
 /// Accounts:
-/// 0. Pool state account (writable, signer via PDA)
-/// 1. Nullifier account (writable)
-/// 2. Processooor/withdrawer (signer)
-/// 3. Pool's token account (writable)
-/// 4. User's token account (writable)
-/// 5. Asset mint
-/// 6. Token program
+/// 0. Pool state account (writable)
+/// 1. Vault PDA (token authority)
+/// 2. Nullifier account (writable)
+/// 3. Processooor/withdrawer (signer)
+/// 4. Pool's token account (writable)
+/// 5. User's token account (writable)
+/// 6. Asset mint
+/// 7. Token program
 pub fn withdraw(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     withdrawal_data: WithdrawalData,
     proof_data: WithdrawProofData,
 ) -> ProgramResult {
-    if accounts.len() < 7 {
+    if accounts.len() < 8 {
         log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
     let pool_account = &accounts[0];
-    let nullifier_account = &accounts[1];
-    let processooor_account = &accounts[2];
-    let pool_token_account = &accounts[3];
-    let user_token_account = &accounts[4];
-    let mint_account = &accounts[5];
-    let _token_program = &accounts[6];
+    let vault_account = &accounts[1];
+    let nullifier_account = &accounts[2];
+    let processooor_account = &accounts[3];
+    let pool_token_account = &accounts[4];
+    let user_token_account = &accounts[5];
+    let mint_account = &accounts[6];
+    let _token_program = &accounts[7];
     
     // Validate signer
     if !processooor_account.is_signer() {
@@ -58,6 +60,16 @@ pub fn withdraw(
     // Verify the mint matches the pool's asset mint
     if *mint_account.key() != Pubkey::from(pool_state.asset_mint) {
         log!("Wrong token mint");
+        return Err(ProgramError::InvalidArgument);
+    }
+    
+    // Verify the vault PDA and get bump
+    let (expected_vault, vault_bump) = pinocchio::pubkey::find_program_address(
+        &[VAULT_PDA_SEED, &pool_state.asset_mint],
+        program_id
+    );
+    if vault_account.key() != &expected_vault {
+        log!("Invalid vault account");
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -101,14 +113,15 @@ pub fn withdraw(
     let mint = unsafe { Mint::from_account_info_unchecked(mint_account)? };
     let decimals = mint.decimals();
     
-    // Use PDA seeds for pool authority signing
-    let seeds = [Seed::from(POOL_PDA_SEED), Seed::from(&pool_state.asset_mint)];
+    // Use vault PDA seeds for signing (including bump)
+    let bump_seed = [vault_bump];
+    let seeds = [Seed::from(VAULT_PDA_SEED), Seed::from(&pool_state.asset_mint), Seed::from(&bump_seed)];
     let signer = Signer::from(&seeds);
     TransferChecked {
         from: pool_token_account,
         to: user_token_account,
         mint: mint_account,
-        authority: pool_account,
+        authority: vault_account,
         amount: withdrawn_value,
         decimals,
     }.invoke_signed(&[signer])?;

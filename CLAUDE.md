@@ -20,11 +20,10 @@ This is necessary when working in environments with cursor proxy configurations.
 
 ## Testing Commands
 - Build program: `unset ARGV0 && cargo build-sbf`
-- Run integration tests with solana-test-validator: 
-  ```bash
-  solana-test-validator --reset --bpf-program 6RAVudLeS2oCBcKXTUwWdjEfJL5wPpRMmagUzpXtJ4WL target/deploy/solana_privacy_pools.so
-  npx mocha tests/privacy-pool.sts.test.js
-  ```
+- Run integration tests with validator: `npm run test:validator`
+  - This script automatically restarts the validator with a fresh ledger
+  - Runs the full test suite with proper validator management
+- Manual test run (if validator already running): `npx mocha tests/privacy-pool.sts.test.js`
 
 ## Important Implementation Notes
 

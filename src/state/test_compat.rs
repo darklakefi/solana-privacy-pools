@@ -66,7 +66,19 @@ impl PrivacyPoolState {
     fn generate_scope(asset_mint: &Pubkey) -> [u8; 32] {
         use pinocchio::syscalls::sol_keccak256;
         let mut scope = [0u8; 32];
-        sol_keccak256(&[b"PrivacyPool", asset_mint.as_ref()], &mut scope);
+        
+        // sol_keccak256 expects array of slices
+        let prefix = b"PrivacyPool";
+        let mint_bytes = asset_mint.as_ref();
+        let slices: [&[u8]; 2] = [prefix, mint_bytes];
+        
+        unsafe {
+            sol_keccak256(
+                slices.as_ptr() as *const u8,
+                slices.len() as u64,
+                scope.as_mut_ptr()
+            );
+        }
         scope
     }
     

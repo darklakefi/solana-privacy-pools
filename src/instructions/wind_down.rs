@@ -6,9 +6,9 @@ use pinocchio::{
 };
 use pinocchio_log::log;
 
-use crate::state::zero_copy::PrivacyPoolStateZC;
+use crate::state::PoolStateLeanIMT;
 
-/// Wind down the pool (disable deposits) using zero-copy accounts
+/// Wind down the pool (disable deposits)
 pub fn wind_down(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -20,20 +20,23 @@ pub fn wind_down(
         return Err(ProgramError::MissingRequiredSignature);
     }
     
-    // Get mutable reference to pool state using zero-copy
-    let pool_state = PrivacyPoolStateZC::from_account_mut(pool_account)?;
+    // Get mutable reference to pool state
+    let mut pool_data = pool_account.try_borrow_mut_data()?;
+    let pool_state = unsafe {
+        &mut *(pool_data.as_mut_ptr() as *mut PoolStateLeanIMT)
+    };
     
-    if pool_state.get_entrypoint_authority() != *entrypoint_account.key() {
+    if &Pubkey::from(pool_state.entrypoint) != entrypoint_account.key() {
         log!("Only entrypoint can wind down pool");
         return Err(ProgramError::InvalidArgument);
     }
     
-    if pool_state.is_dead() {
+    if pool_state.is_dead != 0 {
         log!("Pool already dead");
         return Err(ProgramError::InvalidAccountData);
     }
     
-    pool_state.set_dead(true);
+    pool_state.is_dead = 1;
     
     log!("Pool wound down");
     Ok(())

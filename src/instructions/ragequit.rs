@@ -8,7 +8,7 @@ use pinocchio_log::log;
 use pinocchio_token::{instructions::TransferChecked, state::Mint};
 
 use crate::state::{PoolStateLeanIMT, DepositorStateZC};
-use crate::constants::POOL_PDA_SEED;
+use crate::constants::VAULT_PDA_SEED;
 use pinocchio::instruction::{Seed, Signer};
 
 /// Process a ragequit withdrawal
@@ -17,30 +17,32 @@ use pinocchio::instruction::{Seed, Signer};
 /// 
 /// Accounts:
 /// 0. Pool state account (writable)
-/// 1. Depositor state account (writable)
-/// 2. Ragequitter (signer) - must be original depositor
-/// 3. Pool's token account (writable)
-/// 4. User's token account (writable)
-/// 5. Asset mint
-/// 6. Token program
+/// 1. Vault PDA (token authority)
+/// 2. Depositor state account (writable)
+/// 3. Ragequitter (signer) - must be original depositor
+/// 4. Pool's token account (writable)
+/// 5. User's token account (writable)
+/// 6. Asset mint
+/// 7. Token program
 pub fn ragequit(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     // For now, we'll pass the value directly since there's no circuit
     value: u64,
 ) -> ProgramResult {
-    if accounts.len() < 7 {
+    if accounts.len() < 8 {
         log!("Not enough accounts provided");
         return Err(ProgramError::NotEnoughAccountKeys);
     }
     
     let pool_account = &accounts[0];
-    let depositor_account = &accounts[1];
-    let ragequitter_account = &accounts[2];
-    let pool_token_account = &accounts[3];
-    let user_token_account = &accounts[4];
-    let mint_account = &accounts[5];
-    let _token_program = &accounts[6];
+    let vault_account = &accounts[1];
+    let depositor_account = &accounts[2];
+    let ragequitter_account = &accounts[3];
+    let pool_token_account = &accounts[4];
+    let user_token_account = &accounts[5];
+    let mint_account = &accounts[6];
+    let _token_program = &accounts[7];
     
     if !ragequitter_account.is_signer() {
         log!("Ragequitter must sign");
@@ -49,6 +51,16 @@ pub fn ragequit(
     
     // Get pool state (read-only since we're not modifying pool state)
     let pool_state = PoolStateLeanIMT::from_account_mut(pool_account)?;
+    
+    // Verify the vault PDA and get bump
+    let (expected_vault, vault_bump) = pinocchio::pubkey::find_program_address(
+        &[VAULT_PDA_SEED, &pool_state.asset_mint],
+        program_id
+    );
+    if vault_account.key() != &expected_vault {
+        log!("Invalid vault account");
+        return Err(ProgramError::InvalidArgument);
+    }
     
     // Ragequit is typically only allowed when pool is dead
     if pool_state.is_dead == 0 {
@@ -76,14 +88,15 @@ pub fn ragequit(
     let mint = unsafe { Mint::from_account_info_unchecked(mint_account)? };
     let decimals = mint.decimals();
     
-    // Use PDA seeds for pool authority signing
-    let seeds = [Seed::from(POOL_PDA_SEED), Seed::from(&pool_state.asset_mint)];
+    // Use vault PDA seeds for signing (including bump)
+    let bump_seed = [vault_bump];
+    let seeds = [Seed::from(VAULT_PDA_SEED), Seed::from(&pool_state.asset_mint), Seed::from(&bump_seed)];
     let signer = Signer::from(&seeds);
     TransferChecked {
         from: pool_token_account,
         to: user_token_account,
         mint: mint_account,
-        authority: pool_account,
+        authority: vault_account,
         amount: value,
         decimals,
     }.invoke_signed(&[signer])?;

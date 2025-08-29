@@ -216,24 +216,24 @@ async function main() {
     // ============ 3. CREATE TOKEN ACCOUNTS ============
     console.log('\n3. Setting up SPL token infrastructure...');
     
-    // Derive pool account as PDA using asset mint
-    const [poolAccountPDA, poolBump] = PublicKey.findProgramAddressSync(
+    // Derive vault PDA for token authority
+    const [vaultPDA, vaultBump] = PublicKey.findProgramAddressSync(
         [
-            Buffer.from('privacy_pool'),
+            Buffer.from('vault'),
             WSOL_MINT.toBuffer()
         ],
         programKeypair.publicKey
     );
-    console.log('   Pool PDA:', poolAccountPDA.toString());
-    console.log('   Pool bump:', poolBump);
+    console.log('   Vault PDA:', vaultPDA.toString());
+    console.log('   Vault bump:', vaultBump);
     
     const poolRent = await connection.getMinimumBalanceForRentExemption(POOL_STATE_SIZE);
     
-    // Create pool's WSOL token account
+    // Create pool's WSOL token account owned by vault PDA
     console.log('   Creating pool token account...');
     let poolTokenAccount;
     try {
-        poolTokenAccount = await createTokenAccount(connection, authority, WSOL_MINT, poolAccountPDA);
+        poolTokenAccount = await createTokenAccount(connection, authority, WSOL_MINT, vaultPDA);
         console.log('   ✅ Pool token account created');
     } catch (error) {
         console.error('   ❌ Failed to create pool token account:', error.message);
@@ -392,7 +392,7 @@ async function main() {
         
         const depositIx = new TransactionInstruction({
             keys: [
-                { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
+                { pubkey: poolStateAccount, isSigner: false, isWritable: true },
                 { pubkey: depositorState.publicKey, isSigner: false, isWritable: true },
                 { pubkey: user.publicKey, isSigner: true, isWritable: false },
                 { pubkey: userWsolAccount, isSigner: false, isWritable: true },
@@ -470,7 +470,7 @@ async function main() {
     
     const windDownIx = new TransactionInstruction({
         keys: [
-            { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
+            { pubkey: poolStateAccount, isSigner: false, isWritable: true },
             { pubkey: authority.publicKey, isSigner: true, isWritable: false },
         ],
         programId: programKeypair.publicKey,
@@ -515,7 +515,8 @@ async function main() {
     
     const ragequitIx = new TransactionInstruction({
         keys: [
-            { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
+            { pubkey: poolStateAccount, isSigner: false, isWritable: true },
+            { pubkey: vaultPDA, isSigner: false, isWritable: false },
             { pubkey: depositorStates[0].publicKey, isSigner: false, isWritable: true },
             { pubkey: user1.publicKey, isSigner: true, isWritable: false },
             { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
