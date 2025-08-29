@@ -41,9 +41,13 @@ This is necessary when working in environments with cursor proxy configurations.
    - Must explicitly zero account data during initialization
    
 3. **Poseidon Syscall**: Uses native `sol_poseidon` syscall through pinocchio
-   - Passes slice metadata (ptr + len pairs) to syscall
+   - Requires inputs to be valid BN254 field elements
+   - Keccak hash results must be reduced modulo the field (clear top 2 bits for safety)
+   - Passes array of PoseidonInput structs (ptr, len pairs) to syscall
+   - Uses little-endian format (endianness parameter = 1)
 
 ### Packed Struct Usage
 - Using `#[repr(C, packed)]` for zero-copy structs ensures predictable memory layout
 - Required for direct casting of account data to struct types
 - In tests, must copy field values before assertions due to alignment requirements
+- Direct buffer manipulation needed for nonce updates to ensure persistence

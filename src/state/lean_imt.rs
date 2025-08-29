@@ -282,16 +282,14 @@ impl PoolStateLeanIMT {
         self.nonce
     }
     
-    /// Direct buffer modification for nonce (for debugging)
+    /// Direct buffer modification for nonce
     pub fn increment_nonce_in_buffer(buffer: &mut [u8]) -> u64 {
-        use pinocchio_log::log;
         // Nonce is at offset 168 = 1 + 7 + 32*5 
         // (is_initialized + padding + authority + asset_mint + entrypoint + withdrawal_verifier + scope)
         const NONCE_OFFSET: usize = 168;
         let old_nonce = u64::from_le_bytes(buffer[NONCE_OFFSET..NONCE_OFFSET+8].try_into().unwrap());
         let new_nonce = old_nonce.wrapping_add(1);
         buffer[NONCE_OFFSET..NONCE_OFFSET+8].copy_from_slice(&new_nonce.to_le_bytes());
-        log!("increment_nonce_in_buffer: {} -> {}", old_nonce, new_nonce);
         new_nonce
     }
 }

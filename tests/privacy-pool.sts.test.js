@@ -283,6 +283,7 @@ async function main() {
         const secret = BigInt(2000 + i);
         const precommitment = poseidonHash([nullifier, secret]);
         
+        
         nullifiers.push(nullifier);
         commitments.push(precommitment);
         

@@ -56,16 +56,12 @@ pub fn deposit(
         return Err(ProgramError::InvalidAccountData);
     }
     
-    // Debug: Check nonce before modification
-    let nonce_before = u64::from_le_bytes(pool_data[168..176].try_into().unwrap());
-    log!("Nonce before modification: {}", nonce_before);
     
     // Cast to our state structure
     let pool_state = unsafe {
         &mut *(pool_data.as_mut_ptr() as *mut PoolStateLeanIMT)
     };
     
-    log!("Deposit: Pool state loaded, current nonce={}", pool_state.nonce);
     
     if pool_state.is_dead != 0 {
         log!("Pool is dead");
@@ -96,18 +92,11 @@ pub fn deposit(
     let nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
     // Also update the struct field to keep it in sync
     pool_state.nonce = nonce;
-    log!("Deposit: Using nonce={}", nonce);
     
-    log!("Computing label...");
     let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
-    log!("Label computed");
-    
-    log!("Computing commitment...");
     let commitment = crate::crypto::poseidon::compute_commitment(value, &label, &precommitment_hash);
-    log!("Commitment computed, first byte={}", commitment[0]);
     
     // Insert commitment into state tree
-    log!("Inserting into state tree...");
     pool_state.insert_state_commitment(commitment)?;
     log!("State tree insertion complete");
     
