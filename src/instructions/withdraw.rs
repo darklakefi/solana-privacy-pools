@@ -5,10 +5,12 @@ use pinocchio::{
     ProgramResult,
 };
 use pinocchio_log::log;
-use pinocchio_token::instructions::TransferChecked;
+use pinocchio_token::{instructions::TransferChecked, state::Mint};
 
 use crate::state::{PoolStateLeanIMT, NullifierStateZC};
 use super::types::{WithdrawalData, WithdrawProofData};
+use crate::constants::{POOL_PDA_SEED};
+use pinocchio::instruction::{Seed, Signer};
 
 /// Process a private withdrawal using SPL tokens
 /// 
@@ -95,12 +97,13 @@ pub fn withdraw(
     let withdrawn_value = proof_data.withdrawn_value();
     log!("Transferring tokens to withdrawer");
     
-    // For TransferChecked, we need decimals. For simplicity, assume 9 (like SOL)
-    // In production, you'd read this from the mint account
-    let decimals = 9u8;
+    // Read decimals from the mint account
+    let mint = unsafe { Mint::from_account_info_unchecked(mint_account)? };
+    let decimals = mint.decimals();
     
-    // Since pool account needs to sign as authority, we need to use PDA seeds
-    // For now, assuming pool account can sign (in production, use PDA)
+    // Use PDA seeds for pool authority signing
+    let seeds = [Seed::from(POOL_PDA_SEED), Seed::from(&pool_state.asset_mint)];
+    let signer = Signer::from(&seeds);
     TransferChecked {
         from: pool_token_account,
         to: user_token_account,
@@ -108,7 +111,7 @@ pub fn withdraw(
         authority: pool_account,
         amount: withdrawn_value,
         decimals,
-    }.invoke_signed(&[])?; // Empty seeds for now, would use PDA seeds in production
+    }.invoke_signed(&[signer])?;
     
     log!("Withdrawal successful");
     

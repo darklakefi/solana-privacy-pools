@@ -5,9 +5,11 @@ use pinocchio::{
     ProgramResult,
 };
 use pinocchio_log::log;
-use pinocchio_token::instructions::TransferChecked;
+use pinocchio_token::{instructions::TransferChecked, state::Mint};
 
 use crate::state::{PoolStateLeanIMT, DepositorStateZC};
+use crate::constants::POOL_PDA_SEED;
+use pinocchio::instruction::{Seed, Signer};
 
 /// Process a ragequit withdrawal
 /// Note: In current implementation, ragequit allows depositors to withdraw
@@ -70,10 +72,13 @@ pub fn ragequit(
     // Transfer tokens from pool to user
     log!("Ragequit: transferring tokens to user");
     
-    // For TransferChecked, we need decimals. For simplicity, assume 9 (like SOL)
-    // In production, you'd read this from the mint account
-    let decimals = 9u8;
+    // Read decimals from the mint account
+    let mint = unsafe { Mint::from_account_info_unchecked(mint_account)? };
+    let decimals = mint.decimals();
     
+    // Use PDA seeds for pool authority signing
+    let seeds = [Seed::from(POOL_PDA_SEED), Seed::from(&pool_state.asset_mint)];
+    let signer = Signer::from(&seeds);
     TransferChecked {
         from: pool_token_account,
         to: user_token_account,
@@ -81,7 +86,7 @@ pub fn ragequit(
         authority: pool_account,
         amount: value,
         decimals,
-    }.invoke_signed(&[])?; // Empty seeds for now, would use PDA seeds in production
+    }.invoke_signed(&[signer])?;
     
     // Mark depositor state as withdrawn
     depositor_state.label = [0u8; 32]; // Clear the label

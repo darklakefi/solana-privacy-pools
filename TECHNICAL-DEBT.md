@@ -4,31 +4,19 @@ This document tracks all simplifications and technical debt in the current imple
 
 ## Token Operations
 
-### 1. Hardcoded Decimals
-**Location:** `src/instructions/withdraw.rs:100`, `src/instructions/ragequit.rs:75`
-```rust
-let decimals = 9u8; // Hardcoded, assumes 9 decimals like SOL
-```
-**TODO:** Read decimals from the mint account data in production
+### ~~1. Hardcoded Decimals~~ [FIXED]
+**Location:** `src/instructions/withdraw.rs`, `src/instructions/ragequit.rs`
+**Resolution:** Now reading decimals directly from mint account using `Mint::from_account_info_unchecked()`
 
-### 2. Empty PDA Seeds
-**Location:** `src/instructions/withdraw.rs:111`, `src/instructions/ragequit.rs:84`
-```rust
-.invoke_signed(&[])? // Empty seeds for now, would use PDA seeds in production
-```
-**TODO:** Implement proper PDA seeds for pool authority signing
+### ~~2. Empty PDA Seeds~~ [FIXED]
+**Location:** `src/instructions/withdraw.rs`, `src/instructions/ragequit.rs`
+**Resolution:** Implemented proper PDA seeds using `get_pool_signer_seeds()` from constants module
 
 ## Cryptographic Operations
 
-### 3. Simple Hash for Scope Generation
-**Location:** `src/instructions/initialize.rs` (to be added)
-```rust
-// Generate scope using a simple hash for now
-let mut scope = [0u8; 32];
-scope[..12].copy_from_slice(b"PrivacyPool");
-scope[12..].copy_from_slice(&asset_mint.as_ref()[..20]);
-```
-**TODO:** Use proper keccak256 hashing implementation
+### ~~3. Simple Hash for Scope Generation~~ [FIXED]
+**Location:** `src/instructions/initialize.rs`
+**Resolution:** Now using proper keccak256 hashing via `sol_keccak256` syscall
 
 ### 4. Dummy Withdrawal Verifier
 **Location:** `src/instructions/initialize.rs:89`

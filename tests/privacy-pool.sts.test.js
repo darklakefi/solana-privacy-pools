@@ -20,6 +20,7 @@ const {
 } = require('@solana/spl-token');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { buildPoseidon } = require('circomlibjs');
 const { LeanIMT } = require('@zk-kit/lean-imt');
 const snarkjs = require('snarkjs');
@@ -36,7 +37,12 @@ async function createTokenAccount(connection, payer, mint, owner) {
     const { createAccount, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = require('@solana/spl-token');
     
     // Get or create associated token account
-    const tokenAccount = await getAssociatedTokenAddress(mint, owner);
+    // For PDAs, we need to allow off-curve owners
+    const tokenAccount = await getAssociatedTokenAddress(
+        mint, 
+        owner,
+        true  // allowOwnerOffCurve for PDAs
+    );
     
     // Check if account exists
     const accountInfo = await connection.getAccountInfo(tokenAccount);
@@ -136,23 +142,8 @@ async function main() {
     
     // ============ 2. SETUP TEST VALIDATOR ============
     console.log('\n2. Setting up Solana test validator...');
-    console.log('   Make sure solana-test-validator is running!');
-    console.log('   Run: solana-test-validator --reset');
     
-    // Connect to local test validator
-    const connection = new Connection('http://127.0.0.1:8899', 'confirmed');
-    
-    // Wait for connection
-    try {
-        const version = await connection.getVersion();
-        console.log('   ✅ Connected to test validator:', version['solana-core']);
-    } catch (error) {
-        console.error('   ❌ Failed to connect to test validator');
-        console.error('   Please run: solana-test-validator --reset');
-        process.exit(1);
-    }
-    
-    // Load program keypair
+    // Load program keypair first
     const programKeypairPath = path.join(__dirname, '../target/deploy/solana_privacy_pools-keypair.json');
     const programPath = path.join(__dirname, '../target/deploy/solana_privacy_pools.so');
     
@@ -171,45 +162,113 @@ async function main() {
         fs.writeFileSync(programKeypairPath, JSON.stringify(Array.from(programKeypair.secretKey)));
     }
     console.log('   Program ID:', programKeypair.publicKey.toString());
-    console.log('   ℹ️  Start validator with:');
-    console.log(`   solana-test-validator --reset --bpf-program ${programKeypair.publicKey.toString()} ${programPath}`);
     
-    // Create test accounts
-    const authority = Keypair.generate();
+    // Connect to existing validator (started by test-with-validator.sh)
+    const connection = new Connection('http://127.0.0.1:8899', 'confirmed');
+    console.log('   Connecting to existing test validator...');
+    
+    // Wait for connection (with retries)
+    let connected = false;
+    for (let i = 0; i < 10; i++) {
+        try {
+            const version = await connection.getVersion();
+            console.log('   ✅ Connected to test validator:', version['solana-core']);
+            connected = true;
+            break;
+        } catch (error) {
+            if (i === 9) {
+                console.error('   ❌ Failed to connect to test validator after 10 attempts');
+                console.error('   Make sure the validator is running (started by test-with-validator.sh)');
+                process.exit(1);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+    
+    // Get the test validator's default payer account
+    const payerKeypairPath = path.join(os.homedir(), '.config/solana/id.json');
+    let payer;
+    if (fs.existsSync(payerKeypairPath)) {
+        const payerKeypairData = JSON.parse(fs.readFileSync(payerKeypairPath, 'utf-8'));
+        payer = Keypair.fromSecretKey(new Uint8Array(payerKeypairData));
+        console.log('   Using local payer:', payer.publicKey.toString());
+    } else {
+        // Fallback to test validator's default funded account
+        payer = Keypair.generate();
+        await connection.requestAirdrop(payer.publicKey, 500 * LAMPORTS_PER_SOL);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    const payerBalance = await connection.getBalance(payer.publicKey);
+    console.log(`   Payer balance: ${payerBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    // Create test accounts (use payer as authority for simplicity)
+    const authority = payer;
     const user1 = Keypair.generate();
     const user2 = Keypair.generate();
     const user3 = Keypair.generate();
     
-    // Fund accounts
-    console.log('   Funding accounts...');
-    await connection.requestAirdrop(authority.publicKey, 100 * LAMPORTS_PER_SOL);
+    // Fund user accounts
+    console.log('   Funding user accounts...');
     await connection.requestAirdrop(user1.publicKey, 100 * LAMPORTS_PER_SOL);
     await connection.requestAirdrop(user2.publicKey, 100 * LAMPORTS_PER_SOL);
     await connection.requestAirdrop(user3.publicKey, 100 * LAMPORTS_PER_SOL);
     
-    // Wait for airdrops to be confirmed
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for airdrops to process
+    await new Promise(resolve => setTimeout(resolve, 2000));
     console.log('   ✅ Accounts funded');
     
     // ============ 3. CREATE TOKEN ACCOUNTS ============
     console.log('\n3. Setting up SPL token infrastructure...');
     
-    // Create pool account
-    const poolAccount = Keypair.generate();
+    // Derive pool account as PDA using asset mint
+    const [poolAccountPDA, poolBump] = PublicKey.findProgramAddressSync(
+        [
+            Buffer.from('privacy_pool'),
+            WSOL_MINT.toBuffer()
+        ],
+        programKeypair.publicKey
+    );
+    console.log('   Pool PDA:', poolAccountPDA.toString());
+    console.log('   Pool bump:', poolBump);
+    
     const poolRent = await connection.getMinimumBalanceForRentExemption(POOL_STATE_SIZE);
     
     // Create pool's WSOL token account
-    const poolTokenAccount = await createTokenAccount(connection, authority, WSOL_MINT, poolAccount.publicKey);
-    console.log('   ✅ Pool token account created');
+    console.log('   Creating pool token account...');
+    let poolTokenAccount;
+    try {
+        poolTokenAccount = await createTokenAccount(connection, authority, WSOL_MINT, poolAccountPDA);
+        console.log('   ✅ Pool token account created');
+    } catch (error) {
+        console.error('   ❌ Failed to create pool token account:', error.message);
+        process.exit(1);
+    }
     
     // ============ 4. INITIALIZE PRIVACY POOL ============
     console.log('\n4. Initializing Privacy Pool with WSOL...');
     
-    const createPoolAccountIx = SystemProgram.createAccount({
+    // Pre-create the pool state account using createAccountWithSeed
+    // This avoids the CPI 10KB allocation limit
+    // Use a simple deterministic seed based on mint address
+    const seed = "ps-" + WSOL_MINT.toBase58().slice(0, 29); // Max 32 chars
+    
+    const poolStateAccount = await PublicKey.createWithSeed(
+        authority.publicKey,
+        seed,
+        programKeypair.publicKey
+    );
+    
+    console.log('   Pool state account:', poolStateAccount.toString());
+    console.log('   Pool state seed:', seed);
+    
+    const createPoolStateAccountIx = SystemProgram.createAccountWithSeed({
         fromPubkey: authority.publicKey,
-        newAccountPubkey: poolAccount.publicKey,
+        newAccountPubkey: poolStateAccount,
+        basePubkey: authority.publicKey,
+        seed: seed,
+        lamports: poolRent,
         space: POOL_STATE_SIZE,
-        lamports: Number(poolRent),
         programId: programKeypair.publicKey,
     });
     
@@ -220,35 +279,58 @@ async function main() {
     initData[33] = 32; // max_tree_depth
     WSOL_MINT.toBuffer().copy(initData, 34); // Use WSOL as asset mint
     
+    console.log('   InitData buffer length:', initData.length);
+    console.log('   InitData first byte (instruction):', initData[0]);
+    
     const initIx = new TransactionInstruction({
         keys: [
-            { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
-            { pubkey: authority.publicKey, isSigner: true, isWritable: false },
+            { pubkey: poolStateAccount, isSigner: false, isWritable: true }, // The pre-created state account (pool_account)
+            { pubkey: authority.publicKey, isSigner: true, isWritable: true }, 
             { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
             { pubkey: WSOL_MINT, isSigner: false, isWritable: false },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         programId: programKeypair.publicKey,
         data: initData,
     });
     
+    // Transaction: create state account and initialize pool
     const initTx = new Transaction()
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 }))
-        .add(createPoolAccountIx)
-        .add(initIx);
+        .add(createPoolStateAccountIx)  // First create the state account
+        .add(initIx);  // Then initialize the pool
     
     
     try {
         const txSig = await sendAndConfirmTransaction(
             connection, 
             initTx, 
-            [authority, poolAccount],
+            [authority],  // Only authority signs, PDA is created by the program
             { commitment: 'confirmed' }
         );
         console.log('   ✅ Pool initialized for WSOL token');
         console.log('   Transaction:', txSig);
     } catch (error) {
         console.log('   ❌ Pool initialization failed:', error.message);
+        
+        // Get the full transaction logs
+        if (error.logs) {
+            console.log('\n   Transaction logs:');
+            error.logs.forEach(log => console.log('     ', log));
+        }
+        
+        // Try to get logs via simulation
+        try {
+            const simulation = await connection.simulateTransaction(initTx);
+            if (simulation.value.logs) {
+                console.log('\n   Simulation logs:');
+                simulation.value.logs.forEach(log => console.log('     ', log));
+            }
+        } catch (simError) {
+            console.log('   Could not get simulation logs:', simError.message);
+        }
+        
         process.exit(1);
     }
     
@@ -315,7 +397,7 @@ async function main() {
         
         const depositIx = new TransactionInstruction({
             keys: [
-                { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
+                { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
                 { pubkey: depositorState.publicKey, isSigner: false, isWritable: true },
                 { pubkey: user.publicKey, isSigner: true, isWritable: false },
                 { pubkey: userWsolAccount, isSigner: false, isWritable: true },
@@ -393,7 +475,7 @@ async function main() {
     
     const windDownIx = new TransactionInstruction({
         keys: [
-            { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
+            { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
             { pubkey: authority.publicKey, isSigner: true, isWritable: false },
         ],
         programId: programKeypair.publicKey,
@@ -438,7 +520,7 @@ async function main() {
     
     const ragequitIx = new TransactionInstruction({
         keys: [
-            { pubkey: poolAccount.publicKey, isSigner: false, isWritable: true },
+            { pubkey: poolAccountPDA, isSigner: false, isWritable: true },
             { pubkey: depositorStates[0].publicKey, isSigner: false, isWritable: true },
             { pubkey: user1.publicKey, isSigner: true, isWritable: false },
             { pubkey: poolTokenAccount, isSigner: false, isWritable: true },

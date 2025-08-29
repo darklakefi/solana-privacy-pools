@@ -23,7 +23,13 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
+    use pinocchio_log::log;
+    
+    log!("process_instruction: instruction_data.len() = {}", instruction_data.len() as u64);
+    
     let instruction = PrivacyPoolInstruction::try_from_slice(instruction_data)?;
+    log!("process_instruction: instruction parsed successfully");
+    
     instructions::process_instruction(instruction, program_id, accounts)
 }
 
@@ -50,4 +56,7 @@ pub mod constants {
     ];
     pub const MAX_TREE_DEPTH: u8 = 32;
     pub const ROOT_HISTORY_SIZE: usize = 64;
+    
+    /// PDA seed for privacy pool accounts
+    pub const POOL_PDA_SEED: &[u8] = b"privacy_pool";
 }

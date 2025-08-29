@@ -51,8 +51,10 @@ pub fn deposit(
     // Get pool state - properly maintain the borrow
     let mut pool_data = pool_account.try_borrow_mut_data()?;
     
+    log!("Deposit: pool_data.len() = {}, expected PoolStateLeanIMT::LEN = {}", pool_data.len() as u64, PoolStateLeanIMT::LEN as u64);
+    
     if pool_data.len() != PoolStateLeanIMT::LEN {
-        log!("Invalid pool account size");
+        log!("Invalid pool account size: got {} but expected {}", pool_data.len() as u64, PoolStateLeanIMT::LEN as u64);
         return Err(ProgramError::InvalidAccountData);
     }
     

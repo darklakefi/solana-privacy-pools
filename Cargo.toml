@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-pinocchio = "0.6"
-pinocchio-token = "0.1"
-pinocchio-log = "0.1"
+pinocchio = "0.9"
+pinocchio-token = "0.4"
+pinocchio-log = "0.5"
 groth16-solana = "0.0.1"
 poseidon-ark = { path = "../poseidon-ark" }
 solana-program = "1.18"
 ark-bn254 = "0.4"
 ark-ff = "0.4"
+bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
 
 [lib]
 crate-type = ["cdylib", "lib"]

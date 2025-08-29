@@ -30,10 +30,13 @@ echo -e "\n${YELLOW}Stopping any existing validator...${NC}"
 pkill -f solana-test-validator || true
 sleep 2
 
+# Remove test-ledger to start fresh
+echo -e "${YELLOW}Removing test-ledger...${NC}"
+rm -rf test-ledger
+
 # Start validator with program
 echo -e "\n${GREEN}Starting solana-test-validator with program...${NC}"
 solana-test-validator \
-    --reset \
     --bpf-program "$PROGRAM_ID" target/deploy/solana_privacy_pools.so \
     > validator.log 2>&1 &
 
