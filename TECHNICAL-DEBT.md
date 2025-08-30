@@ -1,93 +1,90 @@
-# Technical Debt and Simplifications
+# Technical Debt and Current Issues
 
-This document tracks all simplifications and technical debt in the current implementation that should be addressed in production.
+This document tracks remaining technical debt and known issues in the current implementation.
 
-## Token Operations
+## Current Problems
 
-### ~~1. Hardcoded Decimals~~ [FIXED]
-**Location:** `src/instructions/withdraw.rs`, `src/instructions/ragequit.rs`
-**Resolution:** Now reading decimals directly from mint account using `Mint::from_account_info_unchecked()`
+### 1. Groth16 Verifier Panic
 
-### ~~2. Empty PDA Seeds~~ [FIXED]
-**Location:** `src/instructions/withdraw.rs`, `src/instructions/ragequit.rs`
-**Resolution:** Implemented proper PDA seeds using `get_pool_signer_seeds()` from constants module
-
-## Cryptographic Operations
-
-### ~~3. Simple Hash for Scope Generation~~ [FIXED]
-**Location:** `src/instructions/initialize.rs`
-**Resolution:** Now using proper keccak256 hashing via `sol_keccak256` syscall
-
-### 4. Dummy Withdrawal Verifier
-**Location:** `src/instructions/initialize.rs:89`
-```rust
-let withdrawal_verifier = Pubkey::from([0u8; 32]);
-```
-**TODO:** Use actual verifier key from circuit in production
+**Location:** `src/crypto/verifying_key.rs`, `vendor/groth16-solana/src/groth16.rs`
+**Issue:** Groth16 verifier panics during proof verification, even with correct proof format (big-endian with negated proof_a)
+**Status:** Blocking deposit functionality
+**TODO:** Debug the exact cause - possibly related to verifying key constants or proof point deserialization
 
 ## Token Account Validation
 
-### 5. ATA Verification
+### 2. ATA Verification
+
 **Location:** `src/instructions/initialize.rs`
+
 ```rust
 // Note: ATA verification would be done client-side
 // The pool_token_account should be the ATA of pool_account for asset_mint
 ```
+
 **TODO:** Add on-chain ATA verification using proper derivation
 
-### 6. Token Program Validation
+### 3. Token Program Validation
+
 **Location:** `src/instructions/initialize.rs`
+
 ```rust
 // Note: We're using pinocchio-token, which handles token program verification internally
 ```
+
 **TODO:** Consider explicit token program validation if needed
 
-## State Management
+## Performance & Memory Issues
 
-### 7. Pool Authority Signing
-**Location:** Multiple withdraw/ragequit operations
-**Issue:** Pool account needs to sign as authority for token transfers but current implementation doesn't properly handle PDA signing
-**TODO:** Implement proper PDA derivation and signing with seeds
+### 4. Stack Frame Overflow Warning
 
-## Testing Simplifications
+**Location:** Build output
+**Issue:** `_ZN4core5slice4sort6stable14driftsort_main` function call overwrites values in frame
+**Impact:** May cause undefined behavior during execution
+**TODO:** Optimize stack usage or refactor sorting operations
 
-### 8. Precomputed Test Hashes
-**Location:** `src/crypto/poseidon.rs`, `src/crypto/verifying_key.rs`
-**Feature Flag:** `test-precomputed-hashes`
-**Issue:** Uses hardcoded hashes for testing instead of actual cryptographic operations
-**TODO:** Integrate real Poseidon hash and Groth16 verification in production
+### 5. Large State Size
 
-### ~~8a. Temporary Keccak256 for Poseidon~~ [FIXED]
-**Location:** `src/crypto/poseidon.rs` - `hash_two`, `hash_three`
-**Issue:** poseidon-ark library was using solana_program instead of pinocchio
-**Resolution:** Updated poseidon-ark to use pinocchio's sol_poseidon syscall directly
+**Location:** `src/state/lean_imt.rs`
+**Issue:** Pool state is 69,936 bytes (near account size limits)
+**TODO:** Consider state compression or off-chain storage for some data
 
-## Missing Features
+## Error Handling
 
-### 9. Circuit Integration
-**Status:** Using mock verification
-**TODO:** Integrate actual ZK circuits for deposit and withdrawal proofs
+### 6. Unwrap Usage
 
-### 10. Proper Error Handling
-**Location:** Various `unwrap()` calls throughout the codebase
+**Location:** Various locations, especially in crypto modules
+**Issue:** Multiple `unwrap()` calls that could panic
 **TODO:** Replace with proper error handling and recovery
+
+### 7. Missing Input Validation
+
+**Location:** Various instructions
+**Examples:**
+
+- No validation that deposit amount matches proof value before expensive verification
+- No checks for overflow in tree operations
+
+**TODO:** Add comprehensive input validation before expensive operations
+
+## Testing Infrastructure
+
+### 8. Missing Unit Tests
+
+**Location:** Throughout codebase
+**Issue:** Cannot run unit tests locally for code using Solana syscalls
+**TODO:** Add integration tests and consider mocking syscalls for unit tests
 
 ## Security Considerations
 
-### 11. Input Validation
-**Location:** Various instructions
-**TODO:** Add comprehensive input validation and bounds checking
+### 9. Nullifier Validation
 
-### 12. Reentrancy Protection
-**Status:** Not implemented
-**TODO:** Add reentrancy guards where necessary
+**Location:** `src/instructions/withdraw.rs`
+**Issue:** Nullifier checking not fully implemented
+**TODO:** Implement proper nullifier validation to prevent double-spending
 
-## Performance Optimizations
+## Notes
 
-### 13. Zero-Copy Optimizations
-**Status:** Partially implemented
-**TODO:** Complete zero-copy implementation for all state operations
+### Ragequit Design
 
-### 14. Batch Operations
-**Status:** Not implemented
-**TODO:** Consider batch deposits/withdrawals for gas efficiency
+Ragequit is intentionally designed as a transparent emergency exit mechanism without ZK proofs. It allows users to withdraw funds by revealing their identity (linking to their depositor state), which is the intended trade-off for emergency situations.

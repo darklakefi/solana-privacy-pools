@@ -82,13 +82,16 @@ pub fn deposit(
         return Err(ProgramError::InvalidArgument);
     }
     
-    // Increment nonce for label generation
-    let nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
-    // Also update the struct field to keep it in sync
-    pool_state.nonce = nonce;
+    // Get current nonce for label generation (before incrementing)
+    let current_nonce = pool_state.nonce;
     
     // Generate label (must match what the circuit expects)
-    let label = crate::crypto::poseidon::compute_label(&pool_state.scope, nonce);
+    let label = crate::crypto::poseidon::compute_label(&pool_state.scope, current_nonce);
+    
+    // Now increment nonce for next deposit
+    let new_nonce = PoolStateLeanIMT::increment_nonce_in_buffer(&mut pool_data);
+    // Also update the struct field to keep it in sync
+    pool_state.nonce = new_nonce;
     
     // Convert label to bytes for proof verification
     let label_bytes = {
@@ -96,6 +99,27 @@ pub fn deposit(
         bytes.copy_from_slice(&label);
         bytes
     };
+    
+    // Debug logging
+    log!("Deposit: Computing label:");
+    // Convert scope to hex string for logging
+    let scope_hex = pool_state.scope.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join("");
+    log!("  Scope: {}", scope_hex.as_str());
+    log!("  Nonce: {}", current_nonce);
+    // Convert label to hex string for logging
+    let expected_hex = label_bytes.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join("");
+    let proof_hex = proof_data.label.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join("");
+    log!("  Expected label: {}", expected_hex.as_str());
+    log!("  Proof label: {}", proof_hex.as_str());
     
     // Verify the proof data matches our expected values
     if proof_data.label != label_bytes {

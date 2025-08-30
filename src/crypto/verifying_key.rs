@@ -1,4 +1,4 @@
-use crate::instructions::{WithdrawProofData, RagequitProofData, CommitmentProofData};
+use crate::instructions::{WithdrawProofData, CommitmentProofData};
 use groth16_solana::groth16::{Groth16Verifier, Groth16Verifyingkey};
 
 // Commitment circuit verifying key from groth16_vkey.json
@@ -149,18 +149,26 @@ pub fn verify_withdraw_proof(proof_data: &WithdrawProofData) -> bool {
 
 /// Verify a commitment proof using Groth16
 pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
-    // The commitment circuit has 4 public inputs:
-    // 0. value
-    // 1. label
-    // 2. commitment (output)
-    // 3. nullifierHash (output)
+    use pinocchio_log::log;
+    
+    // The commitment circuit has 4 public inputs in this order:
+    // 0. commitment (output)
+    // 1. nullifierHash (output)
+    // 2. value (input)
+    // 3. label (input)
     
     let public_signals: [&[u8]; 4] = [
-        &proof_data.value,
-        &proof_data.label,
         &proof_data.commitment,
         &proof_data.nullifier_hash,
+        &proof_data.value,
+        &proof_data.label,
     ];
+    
+    // Debug log the proof components
+    log!("Verifying commitment proof");
+    log!("  proof_a length: {}", proof_data.proof_a.len() as u64);
+    log!("  proof_b length: {}", proof_data.proof_b.len() as u64);
+    log!("  proof_c length: {}", proof_data.proof_c.len() as u64);
     
     // Create verifying key
     let vk = Groth16Verifyingkey {
@@ -172,6 +180,7 @@ pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
         vk_ic: &COMMITMENT_VK_IC,
     };
     
+    log!("Creating Groth16 verifier");
     match Groth16Verifier::new(
         &proof_data.proof_a,
         &proof_data.proof_b,
@@ -188,19 +197,4 @@ pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
         }
         Err(_) => false,
     }
-}
-
-/// Verify a ragequit proof
-/// Ragequit doesn't use ZK proofs - it's a direct withdrawal by the original depositor
-pub fn verify_ragequit_proof(_proof_data: &RagequitProofData) -> bool {
-    // Ragequit verification is simpler - just check that the values match
-    // The actual verification happens by checking the depositor account
-    // and comparing the label
-    
-    // For now, return true as ragequit doesn't need circuit verification
-    // The security comes from checking:
-    // 1. The caller is the original depositor (checked in ragequit.rs)
-    // 2. The label matches (checked in ragequit.rs)
-    // 3. The commitment exists in the tree
-    true
 }

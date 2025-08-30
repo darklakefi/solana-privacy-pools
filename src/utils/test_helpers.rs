@@ -150,20 +150,3 @@ pub fn create_test_withdraw_proof_data() -> WithdrawProofData {
         ],
     }
 }
-
-pub fn create_test_ragequit_proof_data() -> RagequitProofData {
-    let mut value_bytes = [0u8; 32];
-    value_bytes[..8].copy_from_slice(&100u64.to_le_bytes());
-    
-    RagequitProofData {
-        proof_a: [4u8; 64],
-        proof_b: [5u8; 128],
-        proof_c: [6u8; 64],
-        public_signals: vec![
-            value_bytes, // value = 100
-            [50u8; 32],  // label  
-            [51u8; 32],  // commitment_hash
-            [52u8; 32],  // nullifier_hash
-        ],
-    }
-}

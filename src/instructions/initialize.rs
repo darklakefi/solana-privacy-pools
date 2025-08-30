@@ -186,7 +186,10 @@ pub fn initialize_pool(
             scope.as_mut_ptr()
         );
     }
-    log!("Initialize: Scope computed");
+    
+    // Reduce scope to fit in SNARK field (clear top 2 bits)
+    scope[31] &= 0x3F;
+    log!("Initialize: Scope computed and reduced to field");
     
     // Compute withdrawal verifier key hash from the actual verifying key constants
     // This creates a unique identifier for the withdraw circuit's verifying key

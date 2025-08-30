@@ -42,14 +42,6 @@ pub struct WithdrawProofData {
 }
 
 #[derive(Debug)]
-pub struct RagequitProofData {
-    pub proof_a: [u8; 64],
-    pub proof_b: [u8; 128], 
-    pub proof_c: [u8; 64],
-    pub public_signals: Vec<[u8; 32]>,
-}
-
-#[derive(Debug)]
 pub struct CommitmentProofData {
     pub proof_a: [u8; 64],
     pub proof_b: [u8; 128],
@@ -91,24 +83,6 @@ impl WithdrawProofData {
     
     pub fn existing_nullifier_hash(&self) -> [u8; 32] {
         self.public_signals[7]
-    }
-}
-
-impl RagequitProofData {
-    pub fn value(&self) -> u64 {
-        u64::from_le_bytes(self.public_signals[0][..8].try_into().unwrap_or([0u8; 8]))
-    }
-    
-    pub fn label(&self) -> [u8; 32] {
-        self.public_signals[1]
-    }
-    
-    pub fn commitment_hash(&self) -> [u8; 32] {
-        self.public_signals[2]
-    }
-    
-    pub fn nullifier_hash(&self) -> [u8; 32] {
-        self.public_signals[3]
     }
 }
 

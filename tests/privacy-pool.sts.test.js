@@ -18,6 +18,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { buildPoseidon } = require('circomlibjs');
+const snarkjs = require('snarkjs');
+const { keccak256 } = require('js-sha3');
 
 
 // ============ TOKEN HELPER FUNCTIONS ============
@@ -135,6 +137,115 @@ async function main() {
     };
     console.log('   ✅ Poseidon hash function ready');
     
+    // Commitment proof generation helper
+    async function generateCommitmentProof(value, label, nullifier, secret) {
+        const COMMITMENT_WASM = path.join(__dirname, '../../privacy-pools-core/packages/circuits/build/commitment/commitment_js/commitment.wasm');
+        const COMMITMENT_ZKEY = path.join(__dirname, '../../privacy-pools-core/packages/circuits/build/commitment/groth16_pkey.zkey');
+        
+        if (!fs.existsSync(COMMITMENT_WASM) || !fs.existsSync(COMMITMENT_ZKEY)) {
+            console.log('   ⚠️  Circuit files not found, using mock proof for testing');
+            // Return mock proof for testing
+            return {
+                proof: {
+                    proofA: new Uint8Array(64),
+                    proofB: new Uint8Array(128),
+                    proofC: new Uint8Array(64)
+                },
+                publicSignals: {
+                    value: Buffer.alloc(32),
+                    label: Buffer.alloc(32),
+                    commitment: Buffer.alloc(32),
+                    nullifierHash: Buffer.alloc(32)
+                }
+            };
+        }
+        
+        // Prepare witness input
+        const input = {
+            value: value.toString(),
+            label: label.toString(),
+            nullifier: nullifier.toString(),
+            secret: secret.toString()
+        };
+        
+        // Generate witness and proof
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+            input,
+            COMMITMENT_WASM,
+            COMMITMENT_ZKEY
+        );
+        
+        // Helper function to convert BigInt to big-endian 32-byte array
+        function bigIntToBytes32BE(value) {
+            const bytes = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) {
+                bytes[31 - i] = Number((value >> BigInt(i * 8)) & 0xFFn);
+            }
+            return bytes;
+        }
+
+        // Convert proof to bytes (big-endian format expected by groth16-solana)
+        const proofA = new Uint8Array(64);
+        const proofB = new Uint8Array(128);
+        const proofC = new Uint8Array(64);
+        
+        // Convert proof.pi_a (G1 point) to bytes - groth16-solana expects negated proof_a
+        // BN254 field modulus (same as ark_bn254::Fr::MODULUS)
+        const BN254_FIELD_MODULUS = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+        
+        const piA = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];
+        // Negate the y-coordinate: y' = -y mod p = p - y (for non-zero y)
+        const piA_neg = [piA[0], piA[1] === 0n ? 0n : BN254_FIELD_MODULUS - piA[1]];
+        
+        const piABytes0 = bigIntToBytes32BE(piA_neg[0]);
+        const piABytes1 = bigIntToBytes32BE(piA_neg[1]);
+        proofA.set(piABytes0, 0);
+        proofA.set(piABytes1, 32);
+        
+        // Convert proof.pi_b (G2 point) to bytes
+        const piB = [
+            [BigInt(proof.pi_b[0][0]), BigInt(proof.pi_b[0][1])],
+            [BigInt(proof.pi_b[1][0]), BigInt(proof.pi_b[1][1])]
+        ];
+        const piBBytes00 = bigIntToBytes32BE(piB[0][0]);
+        const piBBytes01 = bigIntToBytes32BE(piB[0][1]);
+        const piBBytes10 = bigIntToBytes32BE(piB[1][0]);
+        const piBBytes11 = bigIntToBytes32BE(piB[1][1]);
+        proofB.set(piBBytes00, 0);
+        proofB.set(piBBytes01, 32);
+        proofB.set(piBBytes10, 64);
+        proofB.set(piBBytes11, 96);
+        
+        // Convert proof.pi_c (G1 point) to bytes
+        const piC = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
+        const piCBytes0 = bigIntToBytes32BE(piC[0]);
+        const piCBytes1 = bigIntToBytes32BE(piC[1]);
+        proofC.set(piCBytes0, 0);
+        proofC.set(piCBytes1, 32);
+        
+        // Convert public signals to bytes (big-endian format expected by groth16-solana)
+        // Circuit outputs: [commitment, nullifierHash, value, label]
+        const commitmentBN = BigInt(publicSignals[0]);
+        const nullifierHashBN = BigInt(publicSignals[1]);
+        const valueBN = BigInt(publicSignals[2]);
+        const labelBN = BigInt(publicSignals[3]);
+        
+        const valueBytes = bigIntToBytes32BE(valueBN);
+        const labelBytes = bigIntToBytes32BE(labelBN);
+        const commitmentBytes = bigIntToBytes32BE(commitmentBN);
+        const nullifierHashBytes = bigIntToBytes32BE(nullifierHashBN);
+        
+        return {
+            proof: { proofA, proofB, proofC },
+            publicSignals: {
+                value: valueBytes,
+                label: labelBytes,
+                commitment: commitmentBytes,
+                nullifierHash: nullifierHashBytes
+            }
+        };
+    }
+    
     // ============ 2. SETUP TEST VALIDATOR ============
     console.log('\n2. Setting up Solana test validator...');
     
@@ -242,6 +353,22 @@ async function main() {
     
     // ============ 4. INITIALIZE PRIVACY POOL ============
     console.log('\n4. Initializing Privacy Pool with WSOL...');
+    
+    // Compute the scope for this pool (needed for label generation)
+    // scope = keccak256("PrivacyPool" || asset_mint)
+    const scopeData = Buffer.concat([
+        Buffer.from('PrivacyPool'),
+        WSOL_MINT.toBuffer()
+    ]);
+    const scopeHash = Buffer.from(keccak256.array(scopeData));
+    
+    // Reduce to fit in SNARK field (clear top 2 bits for safety)
+    scopeHash[31] &= 0x3F;
+    
+    console.log('   Computed pool scope:', scopeHash.toString('hex'));
+    
+    // Track the nonce for label generation
+    let currentNonce = 0;
     
     // Pre-create the pool state account using createAccountWithSeed
     // This avoids the CPI 10KB allocation limit
@@ -354,15 +481,52 @@ async function main() {
         const balanceAfterWrap = await getTokenBalance(connection, userWsolAccount);
         console.log(`   ${label} WSOL balance: ${balanceAfterWrap / BigInt(LAMPORTS_PER_SOL)} WSOL`);
         
-        // Prepare deposit data
+        // Prepare deposit data with ZK proof
         const depositAmount = BigInt(amount * LAMPORTS_PER_SOL);
         const nullifier = BigInt(1000 + i);
         const secret = BigInt(2000 + i);
-        const precommitment = poseidonHash([nullifier, secret]);
         
+        // Compute the label that will be generated on-chain
+        // label = keccak256(scope || nonce) % SNARK_SCALAR_FIELD
+        const nonceBuffer = Buffer.alloc(8);
+        nonceBuffer.writeBigUInt64LE(BigInt(currentNonce));
+        const labelData = Buffer.concat([
+            scopeHash,
+            nonceBuffer
+        ]);
+        const labelHash = Buffer.from(keccak256.array(labelData));
+        
+        // Debug: Show what we're hashing
+        console.log(`   Computing label for deposit ${i+1}:`);
+        console.log(`     Scope: ${scopeHash.toString('hex')}`);
+        console.log(`     Nonce: ${currentNonce} (${nonceBuffer.toString('hex')})`);
+        console.log(`     Label data: ${labelData.toString('hex')}`);
+        console.log(`     Label hash (before reduction): ${labelHash.toString('hex')}`);
+        
+        // Reduce to fit in SNARK field (clear top 2 bits)
+        labelHash[31] &= 0x3F;
+        console.log(`     Label hash (after reduction): ${labelHash.toString('hex')}`);
+        
+        // Convert to BigInt for the circuit
+        let labelBigInt = BigInt(0);
+        for (let j = 0; j < 32; j++) {
+            labelBigInt += BigInt(labelHash[j]) << BigInt(j * 8);
+        }
+        
+        console.log(`     Label (as BigInt): ${labelBigInt.toString()}`);
+        currentNonce++; // Increment for next deposit
+        
+        // Generate commitment proof
+        console.log(`   Generating ZK proof for deposit ${i+1}...`);
+        const proofData = await generateCommitmentProof(
+            depositAmount,
+            labelBigInt,
+            nullifier,
+            secret
+        );
         
         nullifiers.push(nullifier);
-        commitments.push(precommitment);
+        commitments.push(proofData.publicSignals.commitment);
         
         // Create depositor state account
         const depositorState = Keypair.generate();
@@ -377,18 +541,34 @@ async function main() {
             programId: programKeypair.publicKey,
         });
         
-        // Prepare deposit instruction
-        const depositData = Buffer.alloc(73);
-        depositData[0] = 1; // DEPOSIT_INSTRUCTION
-        user.publicKey.toBuffer().copy(depositData, 1);
-        depositData.writeBigUInt64LE(depositAmount, 33);
+        // Prepare deposit instruction with proof
+        // Format: 1 + 32 (depositor) + 8 (value) + 64 (proof_a) + 128 (proof_b) + 64 (proof_c) + 32*4 (public signals)
+        const depositData = Buffer.alloc(1 + 32 + 8 + 64 + 128 + 64 + 128);
+        let offset = 0;
         
-        const precommitmentBytes = Buffer.alloc(32);
-        const precommitmentBN = BigInt(precommitment);
-        for (let j = 0; j < 32; j++) {
-            precommitmentBytes[j] = Number((precommitmentBN >> BigInt(j * 8)) & 0xFFn);
-        }
-        precommitmentBytes.copy(depositData, 41);
+        depositData[offset++] = 1; // DEPOSIT_INSTRUCTION
+        user.publicKey.toBuffer().copy(depositData, offset);
+        offset += 32;
+        depositData.writeBigUInt64LE(depositAmount, offset);
+        offset += 8;
+        
+        // Add proof data
+        Buffer.from(proofData.proof.proofA).copy(depositData, offset);
+        offset += 64;
+        Buffer.from(proofData.proof.proofB).copy(depositData, offset);
+        offset += 128;
+        Buffer.from(proofData.proof.proofC).copy(depositData, offset);
+        offset += 64;
+        
+        // Add public signals
+        Buffer.from(proofData.publicSignals.value).copy(depositData, offset);
+        offset += 32;
+        Buffer.from(proofData.publicSignals.label).copy(depositData, offset);
+        offset += 32;
+        Buffer.from(proofData.publicSignals.commitment).copy(depositData, offset);
+        offset += 32;
+        Buffer.from(proofData.publicSignals.nullifierHash).copy(depositData, offset);
+        offset += 32;
         
         const depositIx = new TransactionInstruction({
             keys: [

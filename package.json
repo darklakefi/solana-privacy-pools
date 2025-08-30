@@ -7,8 +7,6 @@
     "build:program": "cargo build-sbf --release",
     "build": "./build.sh",
     "clean": "rm -rf build target",
-    "test": "cargo test --features test-utils",
-    "test:litesvm": "node tests/privacy-pool.test.js",
     "test:validator": "./test-with-validator.sh"
   },
   "devDependencies": {
