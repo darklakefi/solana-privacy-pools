@@ -61,3 +61,15 @@ cd vendor/groth16-solana
 node parse_vk_to_rust.js /path/to/groth16_vkey.json /output/directory/
 ```
 This generates a properly formatted `verifying_key.rs` file with the constants needed for Rust.
+
+## Design Notes
+
+### Ragequit Design
+
+Ragequit is intentionally designed as a transparent emergency exit mechanism without ZK proofs. It allows users to withdraw funds by revealing their identity (linking to their depositor state), which is the intended trade-off for emergency situations.
+
+## Issue Tracking
+
+- Use Linear MCP to track issues for this project
+- All issues should be tagged with the "privacy-pools" label
+- Issues are tracked in the Darklake team workspace

@@ -15,4 +15,7 @@ module.exports = {
     
     // Withdraw operations
     ...require('./withdraw'),
+    
+    // Ragequit operations
+    ...require('./ragequit'),
 };
