@@ -5,6 +5,7 @@ module.exports = {
     
     // Pool operations
     ...require('./pool'),
+    ...require('./pool-parser'),
     
     // Proof generation
     ...require('./proof'),

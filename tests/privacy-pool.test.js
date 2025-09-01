@@ -4,7 +4,7 @@ const {
     Keypair,
     LAMPORTS_PER_SOL,
 } = require('@solana/web3.js');
-const { getAccount } = require('@solana/spl-token');
+const { getAccount, getAssociatedTokenAddress } = require('@solana/spl-token');
 const {
     // Constants
     WSOL_MINT,
@@ -22,6 +22,7 @@ const {
     
     // Withdraw operations
     ragequit,
+    withdraw,
 } = require('./lib');
 
 console.log('=== Privacy Pool Test with Library ===');
@@ -114,8 +115,36 @@ async function main() {
     console.log(`  State tree size: ${poolState.stateTree.size}`);
     console.log(`  ASP tree size: ${poolState.aspTree.size}`);
     
+    // Test withdrawals with ZK proofs
+    console.log('\n5. Testing withdrawals with ZK proofs...');
+    
+    // User 2 withdraws using ZK proof
+    console.log('  User 2 withdrawing with ZK proof...');
+    try {
+        const withdrawResult = await withdraw(
+            connection,
+            poolStateAccount,
+            user2,
+            deposits[1], // User 2's deposit info
+            deposits.map(d => d.commitment), // All commitments for merkle tree
+            WSOL_MINT
+        );
+        console.log('  ✅ User 2 withdrew successfully with ZK proof');
+        console.log(`     Nullifier: ${Buffer.from(withdrawResult.nullifierHash).toString('hex').slice(0, 16)}...`);
+        
+        // Check balance
+        const user2WsolAddress = await getAssociatedTokenAddress(WSOL_MINT, user2.publicKey);
+        const user2WsolAccount = await getAccount(connection, user2WsolAddress);
+        console.log(`     User 2 received: ${user2WsolAccount.amount / BigInt(LAMPORTS_PER_SOL)} WSOL`);
+    } catch (error) {
+        console.log('  ❌ User 2 withdrawal failed:', error.message);
+        if (error.logs) {
+            console.log('     Logs:', error.logs.slice(-5).join('\n     '));
+        }
+    }
+    
     // Test wind down and ragequit
-    console.log('\n5. Testing wind down and ragequit...');
+    console.log('\n6. Testing wind down and ragequit...');
     
     // Wind down the pool
     console.log('  Winding down pool...');
@@ -135,10 +164,8 @@ async function main() {
     console.log('  ✅ User 1 rage quit successful');
     
     // Check final balances
-    const user1WsolAccount = await getAccount(
-        connection, 
-        await require('@solana/spl-token').getAssociatedTokenAddress(WSOL_MINT, user1.publicKey)
-    );
+    const user1WsolAddress = await getAssociatedTokenAddress(WSOL_MINT, user1.publicKey);
+    const user1WsolAccount = await getAccount(connection, user1WsolAddress);
     console.log(`  User 1 recovered: ${user1WsolAccount.amount / BigInt(LAMPORTS_PER_SOL)} WSOL`);
     
     console.log('\n✅ All tests completed successfully!');

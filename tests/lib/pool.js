@@ -13,6 +13,7 @@ const {
     createAssociatedTokenAccountInstruction,
 } = require('@solana/spl-token');
 const { computeScope } = require('./proof');
+const { parsePoolState } = require('./pool-parser');
 const { 
     programKeypair, 
     POOL_STATE_SIZE, 
@@ -84,8 +85,14 @@ async function initializePool(connection, authority, mint = WSOL_MINT) {
     // Compute scope for return value
     const scope = computeScope(mint.toBuffer());
     
-    // Create pool token account first to get its address
+    // Create pool token account owned by vault PDA
     const poolTokenAccount = await getAssociatedTokenAddress(mint, vaultPDA, true);
+    const createPoolTokenAccountIx = createAssociatedTokenAccountInstruction(
+        authority.publicKey,
+        poolTokenAccount,
+        vaultPDA,
+        mint
+    );
     
     const initIx = new TransactionInstruction({
         keys: [
@@ -103,6 +110,7 @@ async function initializePool(connection, authority, mint = WSOL_MINT) {
     const initTx = new Transaction()
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }))
         .add(createPoolAccountIx)
+        .add(createPoolTokenAccountIx)
         .add(initIx);
     
     const txSig = await sendAndConfirmTransaction(
@@ -116,81 +124,12 @@ async function initializePool(connection, authority, mint = WSOL_MINT) {
         poolStateAccount,  // Now just a PublicKey, not a Keypair
         vaultPDA,
         vaultBump,
+        poolTokenAccount,
         scope: scope.buffer,
         txSig
     };
 }
 
-/**
- * Read and parse pool state from account data
- */
-function parsePoolState(accountData) {
-    let offset = 0;
-    
-    const authority = new PublicKey(accountData.slice(offset, offset + 32));
-    offset += 32;
-    
-    const mint = new PublicKey(accountData.slice(offset, offset + 32));
-    offset += 32;
-    
-    const vault = new PublicKey(accountData.slice(offset, offset + 32));
-    offset += 32;
-    
-    const totalDeposits = accountData.readBigUInt64LE(offset);
-    offset += 8;
-    
-    const isActive = accountData[offset] === 1;
-    offset += 1;
-    
-    const isInitialized = accountData[offset] === 1;
-    offset += 1;
-    
-    const scope = accountData.slice(offset, offset + 32);
-    offset += 32;
-    
-    // State tree
-    const stateTreeSize = accountData.readBigUInt64LE(offset);
-    offset += 8;
-    
-    const stateTreeLeaves = [];
-    for (let i = 0; i < stateTreeSize; i++) {
-        const leaf = accountData.slice(offset, offset + 32);
-        stateTreeLeaves.push(leaf);
-        offset += 32;
-    }
-    
-    // Skip rest of state tree array
-    offset += (128 - Number(stateTreeSize)) * 32;
-    
-    // ASP tree
-    const aspTreeSize = accountData.readBigUInt64LE(offset);
-    offset += 8;
-    
-    const aspTreeLeaves = [];
-    for (let i = 0; i < aspTreeSize; i++) {
-        const leaf = accountData.slice(offset, offset + 32);
-        aspTreeLeaves.push(leaf);
-        offset += 32;
-    }
-    
-    return {
-        authority,
-        mint,
-        vault,
-        totalDeposits,
-        isActive,
-        isInitialized,
-        scope,
-        stateTree: {
-            size: Number(stateTreeSize),
-            leaves: stateTreeLeaves
-        },
-        aspTree: {
-            size: Number(aspTreeSize),
-            leaves: aspTreeLeaves
-        }
-    };
-}
 
 /**
  * Wind down a pool (authority only)

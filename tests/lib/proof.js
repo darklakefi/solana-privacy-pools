@@ -7,13 +7,13 @@ const { buildBn128, utils } = require('ffjavascript');
 const { unstringifyBigInts } = utils;
 
 // Circuit paths
-const COMMITMENT_WASM = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/commitment/commitment_js/commitment.wasm');
-const COMMITMENT_ZKEY = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/commitment/groth16_pkey.zkey');
-const COMMITMENT_VKEY = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/commitment/groth16_vkey.json');
+const COMMITMENT_WASM = path.join(__dirname, '../../build/commitment/commitment_js/commitment.wasm');
+const COMMITMENT_ZKEY = path.join(__dirname, '../../build/commitment/groth16_pkey.zkey');
+const COMMITMENT_VKEY = path.join(__dirname, '../../build/commitment/groth16_vkey.json');
 
-const WITHDRAW_WASM = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/withdraw/withdraw_js/withdraw.wasm');
-const WITHDRAW_ZKEY = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/withdraw/groth16_pkey.zkey');
-const WITHDRAW_VKEY = path.join(__dirname, '../../../privacy-pools-core/packages/circuits/build/withdraw/groth16_vkey.json');
+const WITHDRAW_WASM = path.join(__dirname, '../../build/withdraw/withdraw_js/withdraw.wasm');
+const WITHDRAW_ZKEY = path.join(__dirname, '../../build/withdraw/groth16_pkey.zkey');
+const WITHDRAW_VKEY = path.join(__dirname, '../../build/withdraw/groth16_vkey.json');
 
 // Field modulus for BN254
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
@@ -126,7 +126,7 @@ async function generateCommitmentProof(value, label, nullifier, secret) {
         COMMITMENT_ZKEY
     );
     
-    console.log('   Circuit public signals:', publicSignals.map((s, i) => 
+    console.log(`   Circuit public signals (${publicSignals.length} total):`, publicSignals.map((s, i) => 
         `[${i}]: ${BigInt(s).toString(16).padStart(64, '0')}`).join('\n   '));
     
     // Build the curve for proper serialization

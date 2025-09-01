@@ -86,7 +86,7 @@ async function deposit(
     const label = computeLabel(scope, nonce);
     
     // Generate proof
-    const { proof, publicSignals } = await generateCommitmentProof(
+    const { proof, publicSignals, rawPublicSignals } = await generateCommitmentProof(
         amount,
         label.bigint,
         nullifier,
@@ -106,13 +106,17 @@ async function deposit(
     });
     
     // Build deposit instruction data
-    const depositData = Buffer.alloc(553);
-    depositData[0] = INSTRUCTIONS.DEPOSIT;
-    depositData.writeBigUInt64LE(amount, 1);
-    depositData.writeBigUInt64LE(BigInt(nonce), 9);
+    // 1 (instruction) + 32 (depositor) + 8 (value) + 64 (proof_a) + 128 (proof_b) + 64 (proof_c) + 128 (public signals)
+    const depositData = Buffer.alloc(425);
+    let offset = 0;
+    
+    depositData[offset++] = INSTRUCTIONS.DEPOSIT;
+    user.publicKey.toBuffer().copy(depositData, offset);
+    offset += 32;
+    depositData.writeBigUInt64LE(amount, offset);
+    offset += 8;
     
     // Add proof data
-    let offset = 17;
     depositData.set(proof.proofA, offset);
     offset += 64;
     depositData.set(proof.proofB, offset);
@@ -132,14 +136,11 @@ async function deposit(
     const depositIx = new TransactionInstruction({
         keys: [
             { pubkey: poolStateAccount, isSigner: false, isWritable: true },
-            { pubkey: vaultPDA, isSigner: false, isWritable: false },
             { pubkey: depositorState.publicKey, isSigner: false, isWritable: true },
-            { pubkey: user.publicKey, isSigner: true, isWritable: true },
+            { pubkey: user.publicKey, isSigner: true, isWritable: false },
             { pubkey: userTokenAccount, isSigner: false, isWritable: true },
             { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
-            { pubkey: mint, isSigner: false, isWritable: false },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         programId: programKeypair.publicKey,
         data: depositData,
