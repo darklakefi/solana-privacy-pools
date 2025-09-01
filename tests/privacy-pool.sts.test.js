@@ -21,13 +21,13 @@ const { buildPoseidon } = require('circomlibjs');
 const { keccak256 } = require('js-sha3');
 const {
     FIELD_MODULUS,
-    bigIntToBytes32BE,
+    to32ByteBuffer,
     reduceHashToField,
     computeScope,
     computeLabel,
     generateCommitmentProof,
     verifyCommitmentProof
-} = require('./proof-generation');
+} = require('./lib/proof');
 
 
 // ============ TOKEN HELPER FUNCTIONS ============
@@ -364,7 +364,7 @@ async function main() {
     console.log('\n4. Initializing Privacy Pool with WSOL...');
     
     // Compute the scope for this pool (needed for label generation)
-    // scope = keccak256("PrivacyPool" || asset_mint)
+    scope = keccak256("PrivacyPool" || asset_mint)
     const scopeData = Buffer.concat([
         Buffer.from('PrivacyPool'),
         WSOL_MINT.toBuffer()

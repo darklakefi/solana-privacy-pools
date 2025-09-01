@@ -114,6 +114,10 @@ pub fn initialize_pool(
     // Verify the pool account is at the expected address
     if pool_account.key() != &expected_pool_address {
         log!("Invalid pool account - doesn't match expected seed derivation");
+        log!("  Expected: {}", &expected_pool_address);
+        log!("  Got: {}", pool_account.key());
+        log!("  Authority: {}", authority.key());
+        log!("  Seed: {}", seed.as_str());
         return Err(ProgramError::InvalidArgument);
     }
     log!("Initialize: Pool account address verified");

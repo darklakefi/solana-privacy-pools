@@ -43,7 +43,8 @@
       "Bash(solana transaction-history:*)",
       "Bash(git add:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(cargo:*)"
+      "Bash(cargo:*)",
+      "Bash(TEST_FILE=tests/privacy-pool-refactored.test.js npm run test:validator)"
     ],
     "deny": [],
     "ask": [],

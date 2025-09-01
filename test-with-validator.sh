@@ -55,7 +55,9 @@ fi
 
 # Run the test
 echo -e "\n${GREEN}Running test...${NC}\n"
-node tests/privacy-pool.sts.test.js
+# Allow specifying which test to run via environment variable
+TEST_FILE=${TEST_FILE:-tests/privacy-pool.sts.test.js}
+node "$TEST_FILE"
 
 TEST_EXIT_CODE=$?
 
