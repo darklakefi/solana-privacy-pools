@@ -22,5 +22,7 @@ test-ledger/
 .anchor/
 validator.log
 
+.claude/settings.local.json
+
 # Keep build artifacts and trusted setup
 # /build and /trusted-setup are intentionally NOT ignored
