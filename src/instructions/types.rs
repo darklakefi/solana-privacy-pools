@@ -144,17 +144,18 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 64;
                 
-                // Parse public signals (4 x 32 bytes)
-                let value_signal = <[u8; 32]>::try_from(&data[offset..offset + 32])
-                    .map_err(|_| ProgramError::InvalidInstructionData)?;
-                offset += 32;
-                let label = <[u8; 32]>::try_from(&data[offset..offset + 32])
-                    .map_err(|_| ProgramError::InvalidInstructionData)?;
-                offset += 32;
+                // Parse public signals in circuit output order:
+                // [0]: commitment, [1]: nullifierHash, [2]: value, [3]: label
                 let commitment = <[u8; 32]>::try_from(&data[offset..offset + 32])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 32;
                 let nullifier_hash = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let value_signal = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let label = <[u8; 32]>::try_from(&data[offset..offset + 32])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 
                 Ok(PrivacyPoolInstruction::Deposit {

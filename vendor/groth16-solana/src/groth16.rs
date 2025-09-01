@@ -31,12 +31,20 @@ use num_bigint::BigUint;
 // BN254 operations using pinocchio syscalls
 use pinocchio::syscalls::{sol_alt_bn128_group_op};
 
-// Group operation constants
+// Group operation constants (big-endian)
 const ALT_BN128_ADD: u64 = 0;
-const ALT_BN128_MUL: u64 = 1;
-const ALT_BN128_PAIRING: u64 = 2;
+const ALT_BN128_MUL: u64 = 2;  
+const ALT_BN128_PAIRING: u64 = 3;
 
-// Wrapper functions for BN254 operations
+// Little-endian flag
+const LE_FLAG: u64 = 0x80;
+
+// Little-endian versions  
+const ALT_BN128_ADD_LE: u64 = ALT_BN128_ADD | LE_FLAG;  // 0x80
+const ALT_BN128_MUL_LE: u64 = ALT_BN128_MUL | LE_FLAG;  // 0x82
+const ALT_BN128_PAIRING_LE: u64 = ALT_BN128_PAIRING | LE_FLAG;  // 0x83
+
+// Wrapper functions for BN254 operations (big-endian)
 fn alt_bn128_addition(input: &[u8]) -> Result<Vec<u8>, u64> {
     let mut result = vec![0u8; 64];
     let ret = unsafe {
@@ -73,6 +81,43 @@ fn alt_bn128_pairing(input: &[u8]) -> Result<Vec<u8>, u64> {
     }
 }
 
+// Wrapper functions for BN254 operations (little-endian)
+fn alt_bn128_addition_le(input: &[u8]) -> Result<Vec<u8>, u64> {
+    let mut result = vec![0u8; 64];
+    let ret = unsafe {
+        sol_alt_bn128_group_op(ALT_BN128_ADD_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
+    };
+    if ret == 0 {
+        Ok(result)
+    } else {
+        Err(ret)
+    }
+}
+
+fn alt_bn128_multiplication_le(input: &[u8]) -> Result<Vec<u8>, u64> {
+    let mut result = vec![0u8; 64];
+    let ret = unsafe {
+        sol_alt_bn128_group_op(ALT_BN128_MUL_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
+    };
+    if ret == 0 {
+        Ok(result)
+    } else {
+        Err(ret)
+    }
+}
+
+fn alt_bn128_pairing_le(input: &[u8]) -> Result<Vec<u8>, u64> {
+    let mut result = vec![0u8; 32];
+    let ret = unsafe {
+        sol_alt_bn128_group_op(ALT_BN128_PAIRING_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
+    };
+    if ret == 0 {
+        Ok(result)
+    } else {
+        Err(ret)
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct Groth16Verifyingkey<'a> {
     pub nr_pubinputs: usize,
@@ -101,22 +146,48 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
         public_inputs: &'a [[u8; 32]; NR_INPUTS],
         verifyingkey: &'a Groth16Verifyingkey<'a>,
     ) -> Result<Groth16Verifier<'a, NR_INPUTS>, Groth16Error> {
+        #[cfg(feature = "debug-groth16")]
+        {
+            use pinocchio_log::log;
+            log!("Groth16Verifier::new - Starting");
+            log!("  proof_a.len() = {}", proof_a.len() as u64);
+            log!("  proof_b.len() = {}", proof_b.len() as u64);
+            log!("  proof_c.len() = {}", proof_c.len() as u64);
+            log!("  public_inputs.len() = {}", public_inputs.len() as u64);
+            log!("  verifyingkey.vk_ic.len() = {}", verifyingkey.vk_ic.len() as u64);
+        }
+        
         if proof_a.len() != 64 {
+            #[cfg(feature = "debug-groth16")]
+            pinocchio_log::log!("ERROR: Invalid proof_a length");
             return Err(Groth16Error::InvalidG1Length);
         }
 
         if proof_b.len() != 128 {
+            #[cfg(feature = "debug-groth16")]
+            pinocchio_log::log!("ERROR: Invalid proof_b length");
             return Err(Groth16Error::InvalidG2Length);
         }
 
         if proof_c.len() != 64 {
+            #[cfg(feature = "debug-groth16")]
+            pinocchio_log::log!("ERROR: Invalid proof_c length");
             return Err(Groth16Error::InvalidG1Length);
         }
 
         if public_inputs.len() + 1 != verifyingkey.vk_ic.len() {
+            #[cfg(feature = "debug-groth16")]
+            {
+                pinocchio_log::log!("ERROR: Public inputs length mismatch");
+                pinocchio_log::log!("  Expected: {}", (verifyingkey.vk_ic.len() - 1) as u64);
+                pinocchio_log::log!("  Got: {}", public_inputs.len() as u64);
+            }
             return Err(Groth16Error::InvalidPublicInputsLength);
         }
 
+        #[cfg(feature = "debug-groth16")]
+        pinocchio_log::log!("Groth16Verifier::new - Success");
+        
         Ok(Groth16Verifier {
             proof_a,
             proof_b,
@@ -128,25 +199,65 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
     }
 
     pub fn prepare_inputs<const CHECK: bool>(&mut self) -> Result<(), Groth16Error> {
+        #[cfg(feature = "debug-groth16")]
+        pinocchio_log::log!("prepare_inputs - Starting");
+        
         let mut prepared_public_inputs = self.verifyingkey.vk_ic[0];
 
         for (i, input) in self.public_inputs.iter().enumerate() {
+            #[cfg(feature = "debug-groth16")]
+            {
+                pinocchio_log::log!("  Processing input {}", i as u64);
+                // Log first few bytes to debug endianness
+                if input.len() >= 4 {
+                    pinocchio_log::log!("    First 4 bytes: {} {} {} {}", 
+                        input[0] as u64, input[1] as u64, input[2] as u64, input[3] as u64);
+                    pinocchio_log::log!("    Last 4 bytes: {} {} {} {}",
+                        input[28] as u64, input[29] as u64, input[30] as u64, input[31] as u64);
+                }
+            }
+            
             if CHECK && !is_less_than_bn254_field_size_be(input) {
+                #[cfg(feature = "debug-groth16")]
+                pinocchio_log::log!("ERROR: Public input {} greater than field size", i as u64);
                 return Err(Groth16Error::PublicInputGreaterThanFieldSize);
             }
+            
+            #[cfg(feature = "debug-groth16")]
+            pinocchio_log::log!("  Calling alt_bn128_multiplication");
+            
             let mul_res = alt_bn128_multiplication(
                 &[&self.verifyingkey.vk_ic[i + 1][..], &input[..]].concat(),
             )
-            .map_err(|_| Groth16Error::PreparingInputsG1MulFailed)?;
+            .map_err(|e| {
+                #[cfg(feature = "debug-groth16")]
+                pinocchio_log::log!("ERROR: alt_bn128_multiplication failed with {}", e);
+                Groth16Error::PreparingInputsG1MulFailed
+            })?;
+            
+            #[cfg(feature = "debug-groth16")]
+            pinocchio_log::log!("  Calling alt_bn128_addition");
+            
             prepared_public_inputs =
                 alt_bn128_addition(&[&mul_res[..], &prepared_public_inputs[..]].concat())
-                    .map_err(|_| Groth16Error::PreparingInputsG1AdditionFailed)?[..]
+                    .map_err(|e| {
+                        #[cfg(feature = "debug-groth16")]
+                        pinocchio_log::log!("ERROR: alt_bn128_addition failed with {}", e);
+                        Groth16Error::PreparingInputsG1AdditionFailed
+                    })?[..]
                     .try_into()
-                    .map_err(|_| Groth16Error::PreparingInputsG1AdditionFailed)?;
+                    .map_err(|_| {
+                        #[cfg(feature = "debug-groth16")]
+                        pinocchio_log::log!("ERROR: Failed to convert addition result");
+                        Groth16Error::PreparingInputsG1AdditionFailed
+                    })?;
         }
 
         self.prepared_public_inputs = prepared_public_inputs;
 
+        #[cfg(feature = "debug-groth16")]
+        pinocchio_log::log!("prepare_inputs - Success");
+        
         Ok(())
     }
 
@@ -189,6 +300,11 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
 
 pub fn is_less_than_bn254_field_size_be(bytes: &[u8; 32]) -> bool {
     let bigint = BigUint::from_bytes_be(bytes);
+    bigint < ark_bn254::Fr::MODULUS.into()
+}
+
+pub fn is_less_than_bn254_field_size_le(bytes: &[u8; 32]) -> bool {
+    let bigint = BigUint::from_bytes_le(bytes);
     bigint < ark_bn254::Fr::MODULUS.into()
 }
 

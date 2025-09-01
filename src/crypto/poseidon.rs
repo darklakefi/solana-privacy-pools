@@ -1,5 +1,7 @@
 use poseidon_ark::Poseidon;
 use crate::instructions::types::WithdrawalData;
+use ark_ff::{BigInteger, PrimeField};
+use ark_bn254::Fr;
 
 /// Poseidon hash of two byte arrays
 pub fn hash_two(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
@@ -44,13 +46,20 @@ pub fn compute_label(scope: &[u8; 32], nonce: u64) -> [u8; 32] {
         );
     }
     
-    // Reduce modulo the SNARK scalar field
-    // For BN254, if the high bit is set, we need to reduce
-    // For simplicity, we'll clear the high bits to ensure we're in field
-    // Clear the highest 2 bits to ensure we're below the field modulus
-    // BN254 field is approximately 2^254, so clearing top 2 bits ensures we're in range
-    hash[31] &= 0x3F; // Clear top 2 bits of the most significant byte
-    hash
+    // Proper modulo reduction using arkworks
+    // Convert hash to field element (this automatically reduces modulo the field)
+    let mut hash_copy = hash;
+    hash_copy.reverse(); // Convert to little-endian for Fr::from_le_bytes_mod_order
+    let field_element = Fr::from_le_bytes_mod_order(&hash_copy);
+    
+    // Convert back to big-endian bytes
+    let mut result_vec = field_element.into_bigint().to_bytes_le();
+    result_vec.reverse(); // Convert back to big-endian
+    
+    // Convert Vec<u8> to [u8; 32]
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&result_vec);
+    result
 }
 
 /// Compute commitment hash: PoseidonT4.hash([value, label, precommitment_hash])  
@@ -97,7 +106,18 @@ pub fn compute_context(withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32
         );
     }
     
-    // Clear top 2 bits for field reduction
-    hash[31] &= 0x3F;
-    hash
+    // Proper modulo reduction using arkworks
+    // Convert hash to field element (this automatically reduces modulo the field)
+    let mut hash_copy = hash;
+    hash_copy.reverse(); // Convert to little-endian for Fr::from_le_bytes_mod_order
+    let field_element = Fr::from_le_bytes_mod_order(&hash_copy);
+    
+    // Convert back to big-endian bytes
+    let mut result_vec = field_element.into_bigint().to_bytes_le();
+    result_vec.reverse(); // Convert back to big-endian
+    
+    // Convert Vec<u8> to [u8; 32]
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&result_vec);
+    result
 }

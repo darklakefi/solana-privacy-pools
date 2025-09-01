@@ -127,10 +127,10 @@ pub fn deposit(
         return Err(ProgramError::InvalidArgument);
     }
     
-    // Convert value to bytes for verification
+    // Convert value to bytes for verification (big-endian to match circuit output)
     let value_bytes = {
         let mut bytes = [0u8; 32];
-        bytes[..8].copy_from_slice(&value.to_le_bytes());
+        bytes[24..32].copy_from_slice(&value.to_be_bytes());
         bytes
     };
     

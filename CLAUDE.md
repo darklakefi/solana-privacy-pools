@@ -50,3 +50,14 @@ This is necessary when working in environments with cursor proxy configurations.
 - Required for direct casting of account data to struct types
 - In tests, must copy field values before assertions due to alignment requirements
 - Direct buffer manipulation needed for nonce updates to ensure persistence
+
+### Do not simplify without explicit instructions to do so
+- Do not "simplify", mock or reduce functionality without express acknowledgement from the user.
+
+## Verifying Key Generation
+When updating ZK circuit verifying keys, use the script in groth16-solana:
+```bash
+cd vendor/groth16-solana
+node parse_vk_to_rust.js /path/to/groth16_vkey.json /output/directory/
+```
+This generates a properly formatted `verifying_key.rs` file with the constants needed for Rust.

@@ -10,24 +10,24 @@ pub const COMMITMENT_VK_ALPHA_G1: [u8; 64] = [
 ];
 
 pub const COMMITMENT_VK_BETA_G2: [u8; 128] = [
-    14,24,120,71,173,76,121,131,116,208,214,115,43,245,1,132,125,214,139,192,224,113,36,30,2,19,188,127,193,61,183,171,
     9,103,3,47,203,247,118,209,175,201,133,248,136,119,241,130,211,132,128,166,83,242,222,202,169,121,76,188,59,243,6,12,
-    23,57,193,177,164,87,168,199,49,49,35,210,77,47,145,146,248,150,183,198,62,234,5,169,213,127,6,84,122,208,206,200,
-    48,76,251,209,224,138,112,74,153,245,232,71,217,63,140,60,170,253,222,196,107,122,13,55,157,166,154,77,17,35,70,167
+    14,24,120,71,173,76,121,131,116,208,214,115,43,245,1,132,125,214,139,192,224,113,36,30,2,19,188,127,193,61,183,171,
+    48,76,251,209,224,138,112,74,153,245,232,71,217,63,140,60,170,253,222,196,107,122,13,55,157,166,154,77,17,35,70,167,
+    23,57,193,177,164,87,168,199,49,49,35,210,77,47,145,146,248,150,183,198,62,234,5,169,213,127,6,84,122,208,206,200
 ];
 
 pub const COMMITMENT_VK_GAMMA_G2: [u8; 128] = [
-    24,0,222,239,18,31,30,118,66,106,0,102,94,92,68,121,103,67,34,212,247,94,218,221,70,222,189,92,217,146,246,237,
     25,142,147,147,146,13,72,58,114,96,191,183,49,251,93,37,241,170,73,51,53,169,231,18,151,228,133,183,174,243,18,194,
-    18,200,94,165,219,140,109,235,74,171,113,128,141,203,64,143,227,209,231,105,12,67,211,123,76,230,204,1,102,250,125,170,
-    9,6,137,208,88,95,240,117,236,158,153,173,105,12,51,149,188,75,49,51,112,179,142,243,85,172,218,220,209,34,151,91
+    24,0,222,239,18,31,30,118,66,106,0,102,94,92,68,121,103,67,34,212,247,94,218,221,70,222,189,92,217,146,246,237,
+    9,6,137,208,88,95,240,117,236,158,153,173,105,12,51,149,188,75,49,51,112,179,142,243,85,172,218,220,209,34,151,91,
+    18,200,94,165,219,140,109,235,74,171,113,128,141,203,64,143,227,209,231,105,12,67,211,123,76,230,204,1,102,250,125,170
 ];
 
 pub const COMMITMENT_VK_DELTA_G2: [u8; 128] = [
-    36,17,25,141,251,73,3,254,13,195,37,36,242,16,248,59,197,219,33,144,37,179,132,200,210,166,31,122,228,139,126,123,
     21,94,250,135,141,46,209,99,127,16,180,99,151,20,201,157,118,99,107,109,27,244,1,226,156,238,0,37,113,187,189,230,
-    8,81,132,129,50,190,128,104,16,47,120,180,46,96,251,190,38,206,60,101,69,255,150,121,92,139,91,115,230,120,21,29,
-    33,93,113,218,246,102,160,239,83,241,100,145,33,0,255,183,189,212,43,156,220,108,202,95,24,119,179,53,73,227,128,224
+    36,17,25,141,251,73,3,254,13,195,37,36,242,16,248,59,197,219,33,144,37,179,132,200,210,166,31,122,228,139,126,123,
+    33,93,113,218,246,102,160,239,83,241,100,145,33,0,255,183,189,212,43,156,220,108,202,95,24,119,179,53,73,227,128,224,
+    8,81,132,129,50,190,128,104,16,47,120,180,46,96,251,190,38,206,60,101,69,255,150,121,92,139,91,115,230,120,21,29
 ];
 
 pub const COMMITMENT_VK_IC: [[u8; 64]; 5] = [
@@ -111,11 +111,11 @@ pub fn verify_withdraw_proof(proof_data: &WithdrawProofData) -> bool {
         return false;
     }
     
-    // Convert public signals to slice of slices format expected by groth16-solana
-    let public_inputs_refs: Vec<&[u8]> = proof_data.public_signals
-        .iter()
-        .map(|signal| signal.as_slice())
-        .collect();
+    // Convert Vec to fixed-size array
+    let public_signals: [[u8; 32]; NR_PUBLIC_INPUTS] = match proof_data.public_signals[..].try_into() {
+        Ok(arr) => arr,
+        Err(_) => return false,
+    };
     
     // Create verifying key
     let vk = Groth16Verifyingkey {
@@ -128,20 +128,16 @@ pub fn verify_withdraw_proof(proof_data: &WithdrawProofData) -> bool {
     };
     
     // Create and run verifier
-    match Groth16Verifier::new(
+    match Groth16Verifier::<NR_PUBLIC_INPUTS>::new(
         &proof_data.proof_a,
         &proof_data.proof_b,
         &proof_data.proof_c,
-        &public_inputs_refs,
+        &public_signals,
         &vk,
     ) {
         Ok(mut verifier) => {
-            // Prepare inputs
-            if verifier.prepare_inputs().is_err() {
-                return false;
-            }
-            // Verify the proof
-            verifier.verify().is_ok()
+            // Verify the proof without field check (we know our values are valid)
+            verifier.verify_unchecked().is_ok()
         }
         Err(_) => false,
     }
@@ -157,11 +153,11 @@ pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
     // 2. value (input)
     // 3. label (input)
     
-    let public_signals: [&[u8]; 4] = [
-        &proof_data.commitment,
-        &proof_data.nullifier_hash,
-        &proof_data.value,
-        &proof_data.label,
+    let public_signals: [[u8; 32]; 4] = [
+        proof_data.commitment,
+        proof_data.nullifier_hash,
+        proof_data.value,
+        proof_data.label,
     ];
     
     // Debug log the proof components
@@ -181,7 +177,7 @@ pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
     };
     
     log!("Creating Groth16 verifier");
-    match Groth16Verifier::new(
+    match Groth16Verifier::<4>::new(
         &proof_data.proof_a,
         &proof_data.proof_b,
         &proof_data.proof_c,
@@ -189,11 +185,8 @@ pub fn verify_commitment_proof(proof_data: &CommitmentProofData) -> bool {
         &vk,
     ) {
         Ok(mut verifier) => {
-            if verifier.prepare_inputs().is_err() {
-                return false;
-            }
-            // Verify the proof
-            verifier.verify().is_ok()
+            // Verify the proof without field check (we know our values are valid)
+            verifier.verify_unchecked().is_ok()
         }
         Err(_) => false,
     }

@@ -6,6 +6,8 @@ use pinocchio::{
     ProgramResult,
 };
 use pinocchio_log::log;
+use ark_ff::{BigInteger, PrimeField};
+use ark_bn254::Fr;
 
 use crate::state::PoolStateLeanIMT;
 use crate::crypto::verifying_key::{
@@ -187,8 +189,16 @@ pub fn initialize_pool(
         );
     }
     
-    // Reduce scope to fit in SNARK field (clear top 2 bits)
-    scope[31] &= 0x3F;
+    // Proper modulo reduction using arkworks
+    // Convert hash to field element (this automatically reduces modulo the field)
+    let mut scope_copy = scope;
+    scope_copy.reverse(); // Convert to little-endian for Fr::from_le_bytes_mod_order
+    let field_element = Fr::from_le_bytes_mod_order(&scope_copy);
+    
+    // Convert back to big-endian bytes
+    let mut scope_reduced = field_element.into_bigint().to_bytes_le();
+    scope_reduced.reverse(); // Convert back to big-endian
+    scope.copy_from_slice(&scope_reduced);
     log!("Initialize: Scope computed and reduced to field");
     
     // Compute withdrawal verifier key hash from the actual verifying key constants

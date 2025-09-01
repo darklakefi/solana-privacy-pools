@@ -41,7 +41,9 @@
       "Bash(pkill:*)",
       "Bash(solana confirm:*)",
       "Bash(solana transaction-history:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo:*)"
     ],
     "deny": [],
     "ask": [],

@@ -18,8 +18,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { buildPoseidon } = require('circomlibjs');
-const snarkjs = require('snarkjs');
 const { keccak256 } = require('js-sha3');
+const {
+    FIELD_MODULUS,
+    bigIntToBytes32BE,
+    reduceHashToField,
+    computeScope,
+    computeLabel,
+    generateCommitmentProof,
+    verifyCommitmentProof
+} = require('./proof-generation');
 
 
 // ============ TOKEN HELPER FUNCTIONS ============
@@ -137,8 +145,8 @@ async function main() {
     };
     console.log('   ✅ Poseidon hash function ready');
     
-    // Commitment proof generation helper
-    async function generateCommitmentProof(value, label, nullifier, secret) {
+    // Commitment proof generation helper (moved to common module)
+    async function generateCommitmentProofOld(value, label, nullifier, secret) {
         const COMMITMENT_WASM = path.join(__dirname, '../../privacy-pools-core/packages/circuits/build/commitment/commitment_js/commitment.wasm');
         const COMMITMENT_ZKEY = path.join(__dirname, '../../privacy-pools-core/packages/circuits/build/commitment/groth16_pkey.zkey');
         
@@ -175,16 +183,20 @@ async function main() {
             COMMITMENT_ZKEY
         );
         
+        console.log('   Circuit public signals:', publicSignals.map((s, i) => 
+            `[${i}]: ${BigInt(s).toString(16).padStart(64, '0')}`).join('\n   '));
+        
         // Helper function to convert BigInt to big-endian 32-byte array
         function bigIntToBytes32BE(value) {
             const bytes = new Uint8Array(32);
+            let bigintValue = BigInt(value); // Ensure it's a BigInt
             for (let i = 0; i < 32; i++) {
-                bytes[31 - i] = Number((value >> BigInt(i * 8)) & 0xFFn);
+                bytes[31 - i] = Number((bigintValue >> BigInt(i * 8)) & 0xFFn);
             }
             return bytes;
         }
 
-        // Convert proof to bytes (big-endian format expected by groth16-solana)
+        // Convert proof to bytes (big-endian format for standard syscalls)
         const proofA = new Uint8Array(64);
         const proofB = new Uint8Array(128);
         const proofC = new Uint8Array(64);
@@ -223,17 +235,14 @@ async function main() {
         proofC.set(piCBytes0, 0);
         proofC.set(piCBytes1, 32);
         
-        // Convert public signals to bytes (big-endian format expected by groth16-solana)
+        // Convert public signals to bytes 
+        // NOTE: Everything uses big-endian for standard syscalls
         // Circuit outputs: [commitment, nullifierHash, value, label]
-        const commitmentBN = BigInt(publicSignals[0]);
-        const nullifierHashBN = BigInt(publicSignals[1]);
-        const valueBN = BigInt(publicSignals[2]);
-        const labelBN = BigInt(publicSignals[3]);
         
-        const valueBytes = bigIntToBytes32BE(valueBN);
-        const labelBytes = bigIntToBytes32BE(labelBN);
-        const commitmentBytes = bigIntToBytes32BE(commitmentBN);
-        const nullifierHashBytes = bigIntToBytes32BE(nullifierHashBN);
+        const commitmentBytes = bigIntToBytes32BE(publicSignals[0]);
+        const nullifierHashBytes = bigIntToBytes32BE(publicSignals[1]);
+        const valueBytes = bigIntToBytes32BE(publicSignals[2]);
+        const labelBytes = bigIntToBytes32BE(publicSignals[3]);
         
         return {
             proof: { proofA, proofB, proofC },
@@ -362,8 +371,9 @@ async function main() {
     ]);
     const scopeHash = Buffer.from(keccak256.array(scopeData));
     
-    // Reduce to fit in SNARK field (clear top 2 bits for safety)
-    scopeHash[31] &= 0x3F;
+    // Proper modulo reduction to fit in SNARK field
+    const scopeReduced = reduceHashToField(scopeHash);
+    scopeHash.set(scopeReduced.buffer);
     
     console.log('   Computed pool scope:', scopeHash.toString('hex'));
     
@@ -503,17 +513,16 @@ async function main() {
         console.log(`     Label data: ${labelData.toString('hex')}`);
         console.log(`     Label hash (before reduction): ${labelHash.toString('hex')}`);
         
-        // Reduce to fit in SNARK field (clear top 2 bits)
-        labelHash[31] &= 0x3F;
+        // Proper modulo reduction to fit in SNARK field
+        const labelReduced = reduceHashToField(labelHash);
+        labelHash.set(labelReduced.buffer);
         console.log(`     Label hash (after reduction): ${labelHash.toString('hex')}`);
         
-        // Convert to BigInt for the circuit
-        let labelBigInt = BigInt(0);
-        for (let j = 0; j < 32; j++) {
-            labelBigInt += BigInt(labelHash[j]) << BigInt(j * 8);
-        }
+        // Use the already reduced labelBigInt for the circuit
+        let labelBigInt = labelReduced.bigint;
         
         console.log(`     Label (as BigInt): ${labelBigInt.toString()}`);
+        console.log(`     Label (as hex from BigInt): ${labelBigInt.toString(16).padStart(64, '0')}`);
         currentNonce++; // Increment for next deposit
         
         // Generate commitment proof
@@ -560,14 +569,15 @@ async function main() {
         Buffer.from(proofData.proof.proofC).copy(depositData, offset);
         offset += 64;
         
-        // Add public signals
-        Buffer.from(proofData.publicSignals.value).copy(depositData, offset);
-        offset += 32;
-        Buffer.from(proofData.publicSignals.label).copy(depositData, offset);
-        offset += 32;
+        // Add public signals in circuit output order:
+        // [0]: commitment, [1]: nullifierHash, [2]: value, [3]: label
         Buffer.from(proofData.publicSignals.commitment).copy(depositData, offset);
         offset += 32;
         Buffer.from(proofData.publicSignals.nullifierHash).copy(depositData, offset);
+        offset += 32;
+        Buffer.from(proofData.publicSignals.value).copy(depositData, offset);
+        offset += 32;
+        Buffer.from(proofData.publicSignals.label).copy(depositData, offset);
         offset += 32;
         
         const depositIx = new TransactionInstruction({
