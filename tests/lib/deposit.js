@@ -158,15 +158,26 @@ async function deposit(
         { commitment: 'confirmed' }
     );
     
+    // Get pool state to determine leaf index (current tree size)
+    const poolAccountInfo = await connection.getAccountInfo(poolStateAccount);
+    const { parsePoolState } = require('./pool-parser');
+    const poolState = parsePoolState(poolAccountInfo.data);
+    
+    // The leaf index is the size of the tree before this deposit
+    // Since we just added a commitment, we need to subtract 1
+    const leafIndex = poolState.stateTree.size - 1;
+    
     return {
         txSig,
         depositorState: depositorState.publicKey,
         commitment: publicSignals.commitment,
         nullifierHash: publicSignals.nullifierHash,
         label: label.bigint,
+        value: amount, // Add explicit value field
         nullifier,
         secret,
-        nonce
+        nonce,
+        leafIndex // Position in the state tree
     };
 }
 

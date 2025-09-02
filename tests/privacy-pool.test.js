@@ -24,6 +24,7 @@ const {
     ragequit,
     withdraw,
 } = require('./lib');
+const { withdrawSimple } = require('./lib/withdraw-simple');
 
 console.log('=== Privacy Pool Test with Library ===');
 console.log('Program ID:', programKeypair.publicKey.toBase58());
@@ -121,13 +122,14 @@ async function main() {
     // User 2 withdraws using ZK proof
     console.log('  User 2 withdrawing with ZK proof...');
     try {
-        const withdrawResult = await withdraw(
+        const withdrawResult = await withdrawSimple(
             connection,
             poolStateAccount,
             user2,
             deposits[1], // User 2's deposit info
-            deposits.map(d => d.commitment), // All commitments for merkle tree
-            WSOL_MINT
+            deposits, // All deposits for merkle tree
+            WSOL_MINT,
+            deposits[1].value // Withdraw full amount
         );
         console.log('  ✅ User 2 withdrew successfully with ZK proof');
         console.log(`     Nullifier: ${Buffer.from(withdrawResult.nullifierHash).toString('hex').slice(0, 16)}...`);

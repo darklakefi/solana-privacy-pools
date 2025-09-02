@@ -224,6 +224,23 @@ async function generateWithdrawProof(
     }
     
     // Prepare witness input
+    console.log('   Debug: stateSiblings is array?', Array.isArray(stateSiblings), 'length:', stateSiblings ? stateSiblings.length : 'undefined');
+    console.log('   Debug: ASPSiblings is array?', Array.isArray(ASPSiblings), 'length:', ASPSiblings ? ASPSiblings.length : 'undefined');
+    
+    // Ensure arrays are properly formatted
+    const stateSiblingsFormatted = stateSiblings.map(s => {
+        const val = typeof s === 'bigint' ? s : BigInt(s || 0);
+        return val.toString();
+    });
+    
+    const aspSiblingsFormatted = ASPSiblings.map(s => {
+        const val = typeof s === 'bigint' ? s : BigInt(s || 0);
+        return val.toString();
+    });
+    
+    console.log('   Debug: stateSiblingsFormatted length after map:', stateSiblingsFormatted.length);
+    console.log('   Debug: First stateSibling value:', stateSiblingsFormatted[0]);
+    
     const input = {
         withdrawnValue: withdrawnValue.toString(),
         stateRoot: stateRoot.toString(),
@@ -237,11 +254,15 @@ async function generateWithdrawProof(
         existingSecret: existingSecret.toString(),
         newNullifier: newNullifier.toString(),
         newSecret: newSecret.toString(),
-        stateSiblings: stateSiblings.map(s => s.toString()),
         stateIndex: stateIndex.toString(),
-        ASPSiblings: ASPSiblings.map(s => s.toString()),
         ASPIndex: ASPIndex.toString()
     };
+    
+    // Arrays should be passed directly in snarkjs 0.7.4
+    input.stateSiblings = stateSiblingsFormatted;
+    input.ASPSiblings = aspSiblingsFormatted;
+    
+    console.log('   Debug: Input object keys:', Object.keys(input).filter(k => !k.includes('[')).concat(['stateSiblings[...]', 'ASPSiblings[...]']));
     
     // Generate witness and proof
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
