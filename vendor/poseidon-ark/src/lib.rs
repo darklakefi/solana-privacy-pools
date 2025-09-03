@@ -58,6 +58,8 @@ impl Poseidon {
             }
         }
 
+        // Fix byte order to match JavaScript
+        result.reverse();
         Ok(result)
     }
 }

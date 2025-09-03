@@ -1,7 +1,7 @@
 use crate::instructions::types::WithdrawalData;
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, PrimeField};
-use poseidon_ark::Poseidon;
+use poseidon_ark_vendored::Poseidon;
 
 /// Poseidon hash of two byte arrays
 pub fn hash_two(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {

@@ -16,6 +16,7 @@ readme = "README.md"
 hashbrown = "0.15.2"
 poseidon-ark-vendored = { path = "../poseidon-ark" }
 pinocchio = "0.9"
+pinocchio-log = "0.5"
 
 [features]
 default = ["std"]

@@ -1,7 +1,4 @@
-use pinocchio::{
-    program_error::ProgramError,
-    pubkey::Pubkey,
-};
+use pinocchio::{program_error::ProgramError, pubkey::Pubkey};
 
 use crate::BorshDeserialize;
 
@@ -22,9 +19,13 @@ pub enum PrivacyPoolInstruction {
         proof_data: WithdrawProofData,
     },
     Ragequit {
-        value: u64,  // Amount to withdraw (no ZK proof needed for ragequit)
+        value: u64, // Amount to withdraw (no ZK proof needed for ragequit)
     },
     WindDown,
+    TestPoseidon {
+        left: [u8; 32],
+        right: [u8; 32],
+    },
 }
 
 #[derive(Debug)]
@@ -56,31 +57,31 @@ impl WithdrawProofData {
     pub fn withdrawn_value(&self) -> u64 {
         u64::from_le_bytes(self.public_signals[0][..8].try_into().unwrap_or([0u8; 8]))
     }
-    
+
     pub fn state_root(&self) -> [u8; 32] {
         self.public_signals[1]
     }
-    
+
     pub fn state_tree_depth(&self) -> u8 {
         self.public_signals[2][0]
     }
-    
+
     pub fn asp_root(&self) -> [u8; 32] {
         self.public_signals[3]
     }
-    
+
     pub fn asp_tree_depth(&self) -> u8 {
         self.public_signals[4][0]
     }
-    
+
     pub fn context(&self) -> [u8; 32] {
         self.public_signals[5]
     }
-    
+
     pub fn new_commitment_hash(&self) -> [u8; 32] {
         self.public_signals[6]
     }
-    
+
     pub fn existing_nullifier_hash(&self) -> [u8; 32] {
         self.public_signals[7]
     }
@@ -91,7 +92,7 @@ impl BorshDeserialize for PrivacyPoolInstruction {
         if data.is_empty() {
             return Err(ProgramError::InvalidInstructionData);
         }
-        
+
         match data[0] {
             0 => {
                 if data.len() < 1 + 32 + 1 + 32 {
@@ -100,16 +101,16 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let mut offset = 1;
                 let entrypoint_authority = Pubkey::from(
                     <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
                 offset += 32;
                 let max_tree_depth = data[offset];
                 offset += 1;
                 let asset_mint = Pubkey::from(
                     <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
-                
+
                 Ok(PrivacyPoolInstruction::InitializePool {
                     entrypoint_authority,
                     max_tree_depth,
@@ -124,15 +125,15 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let mut offset = 1;
                 let depositor = Pubkey::from(
                     <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
                 offset += 32;
                 let value = u64::from_le_bytes(
                     <[u8; 8]>::try_from(&data[offset..offset + 8])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
                 offset += 8;
-                
+
                 // Parse proof data
                 let proof_a = <[u8; 64]>::try_from(&data[offset..offset + 64])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
@@ -143,7 +144,7 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let proof_c = <[u8; 64]>::try_from(&data[offset..offset + 64])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 64;
-                
+
                 // Parse public signals in circuit output order:
                 // [0]: commitment, [1]: nullifierHash, [2]: value, [3]: label
                 let commitment = <[u8; 32]>::try_from(&data[offset..offset + 32])
@@ -157,7 +158,7 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 offset += 32;
                 let label = <[u8; 32]>::try_from(&data[offset..offset + 32])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
-                
+
                 Ok(PrivacyPoolInstruction::Deposit {
                     depositor,
                     value,
@@ -177,41 +178,41 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 if data.len() < 2 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
-                
+
                 let mut offset = 1;
-                
+
                 // Parse processooor pubkey (32 bytes)
                 if data.len() < offset + 32 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
                 let processooor = Pubkey::from(
                     <[u8; 32]>::try_from(&data[offset..offset + 32])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
                 offset += 32;
-                
+
                 // Parse withdrawal data length (4 bytes)
                 if data.len() < offset + 4 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
                 let data_len = u32::from_le_bytes(
                     <[u8; 4]>::try_from(&data[offset..offset + 4])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 ) as usize;
                 offset += 4;
-                
+
                 // Parse withdrawal data
                 if data.len() < offset + data_len {
                     return Err(ProgramError::InvalidInstructionData);
                 }
                 let withdrawal_data_bytes = data[offset..offset + data_len].to_vec();
                 offset += data_len;
-                
+
                 let withdrawal_data = WithdrawalData {
                     processooor,
                     data: withdrawal_data_bytes,
                 };
-                
+
                 // Parse proof data
                 // proof_a: 64 bytes
                 if data.len() < offset + 64 {
@@ -220,7 +221,7 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let proof_a = <[u8; 64]>::try_from(&data[offset..offset + 64])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 64;
-                
+
                 // proof_b: 128 bytes
                 if data.len() < offset + 128 {
                     return Err(ProgramError::InvalidInstructionData);
@@ -228,7 +229,7 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let proof_b = <[u8; 128]>::try_from(&data[offset..offset + 128])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 128;
-                
+
                 // proof_c: 64 bytes
                 if data.len() < offset + 64 {
                     return Err(ProgramError::InvalidInstructionData);
@@ -236,17 +237,17 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 let proof_c = <[u8; 64]>::try_from(&data[offset..offset + 64])
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
                 offset += 64;
-                
+
                 // Parse public signals count (4 bytes)
                 if data.len() < offset + 4 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
                 let signals_count = u32::from_le_bytes(
                     <[u8; 4]>::try_from(&data[offset..offset + 4])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 ) as usize;
                 offset += 4;
-                
+
                 // Parse public signals (32 bytes each)
                 let mut public_signals = Vec::new();
                 for _ in 0..signals_count {
@@ -258,14 +259,14 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                     public_signals.push(signal);
                     offset += 32;
                 }
-                
+
                 let proof_data = WithdrawProofData {
                     proof_a,
                     proof_b,
                     proof_c,
                     public_signals,
                 };
-                
+
                 Ok(PrivacyPoolInstruction::Withdraw {
                     withdrawal_data,
                     proof_data,
@@ -277,19 +278,31 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                 if data.len() < 1 + 8 {
                     return Err(ProgramError::InvalidInstructionData);
                 }
-                
+
                 let value = u64::from_le_bytes(
                     <[u8; 8]>::try_from(&data[1..9])
-                        .map_err(|_| ProgramError::InvalidInstructionData)?
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
                 );
-                
-                Ok(PrivacyPoolInstruction::Ragequit {
-                    value,
-                })
+
+                Ok(PrivacyPoolInstruction::Ragequit { value })
             }
             4 => {
                 // WindDown instruction - no additional data needed
                 Ok(PrivacyPoolInstruction::WindDown)
+            }
+            99 => {
+                // Test Poseidon instruction for debugging hash compatibility
+                if data.len() < 1 + 32 + 32 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let mut offset = 1;
+                let left = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+                offset += 32;
+                let right = <[u8; 32]>::try_from(&data[offset..offset + 32])
+                    .map_err(|_| ProgramError::InvalidInstructionData)?;
+
+                Ok(PrivacyPoolInstruction::TestPoseidon { left, right })
             }
             _ => Err(ProgramError::InvalidInstructionData),
         }

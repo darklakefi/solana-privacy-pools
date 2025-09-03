@@ -42,10 +42,14 @@ impl LeanIMT {
 
     /// Inserts a new leaf into the tree.
     pub fn insert(&mut self, leaf: IMTNode) -> Result<IMTNode, ()> {
+        use pinocchio_log::log;
+
         // Check if leaf is zero (not allowed)
         if leaf == [0u8; 32] {
             return Err(());
         }
+
+        log!("LeanIMT insert: leaf first byte = {}", leaf[0]);
 
         let index = self.size;
         let mut tree_depth = self.depth as usize;
@@ -78,6 +82,13 @@ impl LeanIMT {
 
         // Update the root node
         self.side_nodes[tree_depth] = node;
+
+        log!(
+            "LeanIMT insert complete: size={}, depth={}, root[0]={}",
+            self.size,
+            self.depth,
+            node[0]
+        );
 
         Ok(node)
     }
