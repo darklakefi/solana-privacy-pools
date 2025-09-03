@@ -2,28 +2,39 @@ const { PublicKey } = require('@solana/web3.js');
 
 /**
  * Parse PoolStateLeanIMT from account data
- * Based on the Rust struct in src/state/lean_imt.rs
+ * 
+ * Memory layout:
+ * - is_initialized: u8 (1 byte)
+ * - _padding1: 7 bytes
+ * - authority: Pubkey (32 bytes)
+ * - asset_mint: Pubkey (32 bytes)
+ * - entrypoint: Pubkey (32 bytes)
+ * - withdrawal_verifier: Pubkey (32 bytes)
+ * - scope: [u8; 32] (32 bytes)
+ * - nonce: u64 (8 bytes)
+ * - is_dead: u8 (1 byte)
+ * - _padding2: 7 bytes
+ * - roots: [[u8; 32]; 64] (2048 bytes)
+ * - current_root_index: u64 (8 bytes)
+ * - state_tree: LeanIMT (variable size)
+ * - asp_tree: LeanIMT (variable size)
  */
 function parsePoolState(accountData) {
-    const ROOT_HISTORY_SIZE = 64;
-    const MAX_TREE_DEPTH = 32;
     let offset = 0;
     
-    // Pool configuration
-    const isInitialized = accountData[offset];
-    offset += 1;
-    offset += 7; // _padding1
+    const is_initialized = accountData.readUInt8(offset);
+    offset += 1 + 7; // Skip padding
     
     const authority = new PublicKey(accountData.slice(offset, offset + 32));
     offset += 32;
     
-    const assetMint = new PublicKey(accountData.slice(offset, offset + 32));
+    const asset_mint = new PublicKey(accountData.slice(offset, offset + 32));
     offset += 32;
     
     const entrypoint = new PublicKey(accountData.slice(offset, offset + 32));
     offset += 32;
     
-    const withdrawalVerifier = new PublicKey(accountData.slice(offset, offset + 32));
+    const withdrawal_verifier = new PublicKey(accountData.slice(offset, offset + 32));
     offset += 32;
     
     const scope = accountData.slice(offset, offset + 32);
@@ -32,52 +43,52 @@ function parsePoolState(accountData) {
     const nonce = accountData.readBigUInt64LE(offset);
     offset += 8;
     
-    const isDead = accountData[offset];
-    offset += 1;
-    offset += 7; // _padding2
+    const is_dead = accountData.readUInt8(offset);
+    offset += 1 + 7; // Skip padding
     
-    // Root history (circular buffer)
+    // Root history
     const roots = [];
-    for (let i = 0; i < ROOT_HISTORY_SIZE; i++) {
+    for (let i = 0; i < 64; i++) {
         roots.push(accountData.slice(offset, offset + 32));
         offset += 32;
     }
+    
     const currentRootIndex = accountData.readBigUInt64LE(offset);
     offset += 8;
     
-    // State tree - LeanIMTStateZC structure
+    // Parse state tree
     const stateTree = parseLeanIMT(accountData, offset);
     offset += getLeanIMTSize();
     
-    // ASP tree - LeanIMTStateZC structure
+    // Parse ASP tree
     const aspTree = parseLeanIMT(accountData, offset);
     
-    // Calculate total deposits based on nonce
-    const totalDeposits = Number(nonce);
-    
     return {
-        isInitialized: isInitialized === 1,
+        is_initialized,
         authority,
-        assetMint,
+        asset_mint,
         entrypoint,
-        withdrawalVerifier,
+        withdrawal_verifier,
         scope,
-        nonce,
-        isDead: isDead === 1,
+        nonce: Number(nonce),
+        is_dead,
         roots,
-        currentRootIndex,
+        currentRootIndex: Number(currentRootIndex),
         stateTree,
-        aspTree,
-        totalDeposits,
-        mint: assetMint, // Alias for compatibility
+        aspTree
     };
 }
 
 /**
- * Parse LeanIMTStateZC structure
+ * Parse vendored LeanIMT structure
+ * New structure:
+ * - size: u64 (8 bytes)
+ * - depth: u32 (4 bytes)
+ * - padding: 4 bytes (alignment)
+ * - side_nodes: [[u8; 32]; 21] (672 bytes) // MAX_TREE_DEPTH=20 + 1
  */
 function parseLeanIMT(accountData, startOffset) {
-    const MAX_TREE_DEPTH = 32;
+    const MAX_TREE_DEPTH = 20; // Updated to match vendored implementation
     let offset = startOffset;
     
     const size = accountData.readBigUInt64LE(offset);
@@ -86,54 +97,42 @@ function parseLeanIMT(accountData, startOffset) {
     const depth = accountData.readUInt32LE(offset);
     offset += 4;
     
-    offset += 4; // _padding
+    // Skip 4 bytes of alignment padding
+    offset += 4;
     
-    // Side nodes array (33 * 32 bytes)
+    // Side nodes array (21 * 32 bytes) - MAX_TREE_DEPTH + 1
     const sideNodes = [];
     for (let i = 0; i <= MAX_TREE_DEPTH; i++) {
         sideNodes.push(accountData.slice(offset, offset + 32));
         offset += 32;
     }
     
-    // Leaf indices array (1024 * 32 bytes)
-    const leafIndices = [];
-    let nonZeroLeaves = [];
-    for (let i = 0; i < 1024; i++) {
-        const leaf = accountData.slice(offset, offset + 32);
-        leafIndices.push(leaf);
-        // Check if leaf is non-zero (has actual data)
-        if (!leaf.every(byte => byte === 0)) {
-            nonZeroLeaves.push(leaf);
-        }
-        offset += 32;
-    }
+    // No function pointer anymore
     
-    const leafCount = accountData.readBigUInt64LE(offset);
-    offset += 8;
+    // The current root is at sideNodes[depth]
+    const currentRoot = depth <= MAX_TREE_DEPTH ? sideNodes[depth] : Buffer.alloc(32);
     
     return {
         size: Number(size),
         depth,
         sideNodes,
-        leafIndices,
-        leafCount: Number(leafCount),
-        leaves: nonZeroLeaves.slice(0, Number(leafCount))
+        root: currentRoot, // Add convenient access to current root
     };
 }
 
 /**
- * Get the size of LeanIMTStateZC in bytes
+ * Get the size of vendored LeanIMT in bytes
  */
 function getLeanIMTSize() {
-    const MAX_TREE_DEPTH = 32;
+    const MAX_TREE_DEPTH = 20; // Updated to match vendored implementation
     return 8 + // size
            4 + // depth
-           4 + // padding
-           ((MAX_TREE_DEPTH + 1) * 32) + // side_nodes
-           (1024 * 32) + // leaf_indices
-           8; // leaf_count
+           4 + // alignment padding
+           ((MAX_TREE_DEPTH + 1) * 32); // side_nodes
 }
 
 module.exports = {
-    parsePoolState
+    parsePoolState,
+    parseLeanIMT,
+    getLeanIMTSize
 };

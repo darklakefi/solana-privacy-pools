@@ -81,10 +81,9 @@ async function withdrawSimple(
     const merkleProofs = await generateMerkleProofs(allDeposits, depositIndex);
     console.log('    Debug: Generated merkle proofs');
     
-    // Get the current state root from pool (should match our computed root)
-    // The pool stores multiple roots in a circular buffer, we need the current one
-    const currentRootIndex = Number(poolState.currentRootIndex);
-    const stateRootFromPool = poolState.roots[currentRootIndex];
+    // Get the current state root from the state tree
+    // With vendored LeanIMT, the root is at sideNodes[depth]
+    const stateRootFromPool = poolState.stateTree.root;
     
     // Convert state root to BigInt
     let stateRootFromPoolBigInt = BigInt(0);

@@ -1,0 +1,19 @@
+{
+  "name": "solana-hashing-tests",
+  "version": "1.0.0",
+  "description": "Solana hashing CU optimization tests",
+  "type": "module",
+  "scripts": {
+    "build-program": "cd program && cargo build-sbf",
+    "test": "node tests/hash-test.js"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.3.7",
+    "@solana/web3.js": "^1.68.0",
+    "litesvm": "^0.2.0",
+    "bs58": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0"
+  }
+}

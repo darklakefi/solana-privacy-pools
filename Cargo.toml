@@ -8,6 +8,7 @@ pinocchio = "0.9"
 pinocchio-token = "0.4"
 pinocchio-log = "0.5"
 groth16-solana = { path = "vendor/groth16-solana", features = ["debug-groth16"] }
+lean-imt = { path = "vendor/lean-imt", default-features = false }
 poseidon-ark = { path = "../poseidon-ark" }
 bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
 ark-ff = { version = "0.5", default-features = false }

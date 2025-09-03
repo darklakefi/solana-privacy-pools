@@ -16,7 +16,7 @@ const programKeypair = Keypair.fromSecretKey(
 );
 
 // Account sizes
-const POOL_STATE_SIZE = 69936; // Lean IMT pool state size
+const POOL_STATE_SIZE = 3616; // Vendored Lean IMT pool state size (with alignment)
 const DEPOSITOR_STATE_SIZE = 64;
 const NULLIFIER_STATE_SIZE = 33;
 

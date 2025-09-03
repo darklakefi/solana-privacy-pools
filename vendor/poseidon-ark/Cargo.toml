@@ -1,0 +1,14 @@
+[package]
+name = "poseidon-ark-vendored"
+version = "0.0.1"
+authors = ["arnaucube <root@arnaucube.com>"]
+edition = "2021"
+license = "Apache-2.0"
+description = "Poseidon hash implementation"
+repository = "https://github.com/arnaucube/poseidon-ark"
+readme = "README.md"
+
+[dependencies]
+pinocchio = "0.6"
+pinocchio-log = "0.1"
+

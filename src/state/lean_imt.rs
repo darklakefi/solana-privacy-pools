@@ -1,296 +1,53 @@
-use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-};
+use crate::crypto::poseidon;
 
-// Constants matching the Solidity implementation
-pub const MAX_TREE_DEPTH: usize = 32;
-pub const ROOT_HISTORY_SIZE: usize = 64;
+// Use the vendored LeanIMT implementation
+pub use lean_imt::solana_impl::{LeanIMT, IMTNode, MAX_TREE_DEPTH};
 
-/// Lean Incremental Merkle Tree implementation matching the Solidity version
-/// This is a zero-copy structure that fits in a Solana account
-#[repr(C, packed)]
-#[derive(Clone, Copy)]
-pub struct LeanIMTStateZC {
-    /// Current number of leaves in the tree
-    pub size: u64,
-    /// Current depth of the tree (dynamic, increases as needed)
-    pub depth: u32,
-    /// Padding for alignment
-    pub _padding: u32,
-    /// Side nodes at each level (equivalent to sideNodes mapping in Solidity)
-    /// sideNodes[level] = node value of the last even position at that level
-    pub side_nodes: [[u8; 32]; MAX_TREE_DEPTH + 1], // +1 because root is at depth
-    /// Mapping from leaf values to their indices (we'll use a simple array for now)
-    /// In production, this would need a different approach
-    pub leaf_indices: [[u8; 32]; 1024], // Store leaf values that exist
-    pub leaf_count: u64,
+// Helper function for Poseidon hash
+pub fn poseidon_hash(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    poseidon::hash_two(left, right)
 }
 
-impl LeanIMTStateZC {
-    pub const LEN: usize = std::mem::size_of::<Self>();
-    
-    /// Get mutable reference from account
-    pub fn from_account_mut<'a>(account: &'a AccountInfo) -> Result<&'a mut Self, ProgramError> {
-        if account.data_len() != Self::LEN {
-            return Err(ProgramError::InvalidAccountData);
-        }
-        
-        let data_ptr = account.try_borrow_mut_data()?.as_mut_ptr();
-        unsafe {
-            let state = &mut *(data_ptr as *mut Self);
-            Ok(state)
-        }
-    }
-    
-    /// Initialize the tree
-    pub fn initialize(&mut self) {
-        self.size = 0;
-        self.depth = 0;
-        self._padding = 0;
-        
-        // Initialize all side nodes to zero
-        for i in 0..=MAX_TREE_DEPTH {
-            self.side_nodes[i] = [0u8; 32];
-        }
-        
-        // Initialize leaf tracking
-        self.leaf_count = 0;
-        for i in 0..1024 {
-            self.leaf_indices[i] = [0u8; 32];
-        }
-    }
-    
-    /// Insert a leaf into the Lean IMT
-    /// This follows the exact algorithm from the Solidity implementation
-    pub fn insert(&mut self, leaf: [u8; 32]) -> Result<[u8; 32], ProgramError> {
-        use pinocchio_log::log;
-        log!("Lean IMT insert: leaf[0]={}, current size={}", leaf[0], self.size);
-        
-        // Check if leaf already exists (simplified check)
-        if self.has_leaf(&leaf) {
-            log!("Lean IMT: Leaf already exists!");
-            return Err(ProgramError::InvalidArgument);
-        }
-        
-        let index = self.size;
-        
-        // Calculate new depth if needed
-        // A new insertion can increase tree depth by at most 1
-        let mut tree_depth = self.depth as usize;
-        let required_capacity = index + 1;
-        let current_capacity = 1u64 << tree_depth;
-        
-        if current_capacity < required_capacity {
-            tree_depth += 1;
-            self.depth = tree_depth as u32;
-        }
-        
-        // Start with the leaf as current node
-        let mut node = leaf;
-        
-        // Traverse up the tree
-        for level in 0..tree_depth {
-            let is_right = ((index >> level) & 1) == 1;
-            
-            // Check if we're at an odd position at this level
-            if is_right {
-                // We're a right child, hash with the saved left sibling
-                node = crate::crypto::poseidon::hash_two(
-                    &self.side_nodes[level],
-                    &node
-                );
-            } else {
-                // We're a left child, save this node for later
-                self.side_nodes[level] = node;
-            }
-        }
-        
-        // Increment size
-        self.size = index + 1;
-        
-        // Save the root at the current depth
-        // Make sure we don't exceed array bounds
-        // Array is MAX_TREE_DEPTH + 1 in size, so valid indices are 0..=MAX_TREE_DEPTH
-        if tree_depth > crate::constants::MAX_TREE_DEPTH as usize {
-            return Err(ProgramError::InvalidArgument);
-        }
-        
-        self.side_nodes[tree_depth] = node;
-        
-        // Track the leaf (simplified - in production would need better approach)
-        if self.leaf_count < 1024 {
-            self.leaf_indices[self.leaf_count as usize] = leaf;
-            self.leaf_count += 1;
-        }
-        
-        Ok(node)
-    }
-    
-    /// Get the current root
-    pub fn root(&self) -> [u8; 32] {
-        let depth = self.depth as usize;
-        if depth >= crate::constants::MAX_TREE_DEPTH as usize {
-            // Return empty root if depth exceeds max
-            return [0u8; 32];
-        }
-        self.side_nodes[depth]
-    }
-    
-    /// Check if a leaf exists in the tree
-    pub fn has_leaf(&self, leaf: &[u8; 32]) -> bool {
-        for i in 0..self.leaf_count {
-            if self.leaf_indices[i as usize] == *leaf {
-                return true;
-            }
-        }
-        false
-    }
-    
-    /// Get the index of a leaf (returns None if not found)
-    pub fn index_of(&self, leaf: &[u8; 32]) -> Option<u64> {
-        for i in 0..self.leaf_count {
-            if self.leaf_indices[i as usize] == *leaf {
-                return Some(i);
-            }
-        }
-        None
-    }
+// Create a new LeanIMT (always uses Poseidon hash)
+pub fn new_poseidon_tree() -> LeanIMT {
+    LeanIMT::new()
 }
 
-/// Pool state using Lean IMT
-#[repr(C, packed)]
-#[derive(Clone, Copy)]
-pub struct PoolStateLeanIMT {
-    /// Pool configuration
-    pub is_initialized: u8,
-    pub _padding1: [u8; 7],
-    pub authority: [u8; 32],
-    pub asset_mint: [u8; 32],
-    pub entrypoint: [u8; 32],
-    pub withdrawal_verifier: [u8; 32],
-    pub scope: [u8; 32],
-    pub nonce: u64,
-    pub is_dead: u8,
-    pub _padding2: [u8; 7],
-    
-    /// Root history (circular buffer)
-    pub roots: [[u8; 32]; ROOT_HISTORY_SIZE],
-    pub current_root_index: u64,
-    
-    /// Lean IMT for state tree
-    pub state_tree: LeanIMTStateZC,
-    
-    /// Lean IMT for ASP tree
-    pub asp_tree: LeanIMTStateZC,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl PoolStateLeanIMT {
-    pub const LEN: usize = std::mem::size_of::<Self>();
-    
-    pub fn from_account_mut<'a>(account: &'a AccountInfo) -> Result<&'a mut Self, ProgramError> {
-        if account.data_len() != Self::LEN {
-            return Err(ProgramError::InvalidAccountData);
-        }
+    #[test]
+    fn test_lean_imt_insert() {
+        let mut tree = new_poseidon_tree();
+        let leaf = [1u8; 32];
         
-        let data_ptr = account.try_borrow_mut_data()?.as_mut_ptr();
-        unsafe {
-            let state = &mut *(data_ptr as *mut Self);
-            Ok(state)
-        }
-    }
-    
-    pub fn initialize(
-        &mut self,
-        authority: Pubkey,
-        asset_mint: Pubkey,
-        entrypoint: Pubkey,
-        withdrawal_verifier: Pubkey,
-        scope: [u8; 32],
-    ) {
-        self.is_initialized = 1;
-        self.authority.copy_from_slice(authority.as_ref());
-        self.asset_mint.copy_from_slice(asset_mint.as_ref());
-        self.entrypoint.copy_from_slice(entrypoint.as_ref());
-        self.withdrawal_verifier.copy_from_slice(withdrawal_verifier.as_ref());
-        self.scope = scope;
-        self.nonce = 0;
-        self.is_dead = 0;
+        assert_eq!(tree.get_size(), 0);
+        assert_eq!(tree.get_depth(), 0);
         
-        use pinocchio_log::log;
-        log!("Pool initialized with nonce={}", self.nonce);
+        let root = tree.insert(leaf).unwrap();
+        assert_eq!(tree.get_size(), 1);
+        assert_eq!(tree.root(), root);
+    }
+
+    #[test]
+    fn test_lean_imt_multiple_inserts() {
+        let mut tree = new_poseidon_tree();
         
-        // Initialize root history
-        for i in 0..ROOT_HISTORY_SIZE {
-            self.roots[i] = [0u8; 32];
-        }
-        self.current_root_index = 0;
+        let leaf1 = [1u8; 32];
+        let leaf2 = [2u8; 32];
+        let leaf3 = [3u8; 32];
         
-        // Initialize trees
-        self.state_tree.initialize();
-        self.asp_tree.initialize();
-    }
-    
-    pub fn insert_state_commitment(&mut self, commitment: [u8; 32]) -> Result<(), ProgramError> {
-        // Insert into state tree
-        let new_root = self.state_tree.insert(commitment)?;
+        tree.insert(leaf1).unwrap();
+        assert_eq!(tree.get_size(), 1);
+        assert_eq!(tree.get_depth(), 0);
         
-        // Add to root history
-        self.add_root(new_root);
+        tree.insert(leaf2).unwrap();
+        assert_eq!(tree.get_size(), 2);
+        assert_eq!(tree.get_depth(), 1);
         
-        Ok(())
-    }
-    
-    pub fn insert_asp_label(&mut self, label: [u8; 32]) -> Result<(), ProgramError> {
-        // Insert into ASP tree
-        self.asp_tree.insert(label)?;
-        Ok(())
-    }
-    
-    pub fn add_root(&mut self, root: [u8; 32]) {
-        let index = (self.current_root_index as usize) % ROOT_HISTORY_SIZE;
-        self.roots[index] = root;
-        self.current_root_index = ((self.current_root_index + 1) as usize % ROOT_HISTORY_SIZE) as u64;
-    }
-    
-    pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
-        self.roots.iter().any(|r| r == root)
-    }
-    
-    pub fn get_state_root(&self) -> [u8; 32] {
-        self.state_tree.root()
-    }
-    
-    pub fn get_asp_root(&self) -> [u8; 32] {
-        self.asp_tree.root()
-    }
-    
-    pub fn get_state_depth(&self) -> u32 {
-        self.state_tree.depth
-    }
-    
-    pub fn get_asp_depth(&self) -> u32 {
-        self.asp_tree.depth
-    }
-    
-    pub fn increment_nonce(&mut self) -> u64 {
-        use pinocchio_log::log;
-        let old_nonce = self.nonce;
-        self.nonce = self.nonce.wrapping_add(1);
-        log!("increment_nonce: {} -> {}", old_nonce, self.nonce);
-        self.nonce
-    }
-    
-    /// Direct buffer modification for nonce
-    pub fn increment_nonce_in_buffer(buffer: &mut [u8]) -> u64 {
-        // Nonce is at offset 168 = 1 + 7 + 32*5 
-        // (is_initialized + padding + authority + asset_mint + entrypoint + withdrawal_verifier + scope)
-        const NONCE_OFFSET: usize = 168;
-        let old_nonce = u64::from_le_bytes(buffer[NONCE_OFFSET..NONCE_OFFSET+8].try_into().unwrap());
-        let new_nonce = old_nonce.wrapping_add(1);
-        buffer[NONCE_OFFSET..NONCE_OFFSET+8].copy_from_slice(&new_nonce.to_le_bytes());
-        new_nonce
+        tree.insert(leaf3).unwrap();
+        assert_eq!(tree.get_size(), 3);
+        assert_eq!(tree.get_depth(), 2);
     }
 }
-

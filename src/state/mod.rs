@@ -1,7 +1,9 @@
 pub mod zero_copy;
 pub mod lean_imt;
+pub mod pool;
 
-// Export the Lean IMT implementation as the primary one
+// Export the pool state and Lean IMT implementation
+pub use pool::PoolStateLeanIMT;
 pub use lean_imt::*;
 
 // Keep zero_copy for backwards compatibility during migration

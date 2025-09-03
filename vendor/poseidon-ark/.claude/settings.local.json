@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm run build-program:*)",
+      "Bash(npm test)",
+      "WebFetch(domain:litesvm.github.io)",
+      "Bash(node:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(cargo build-sbf:*)",
+      "Bash(timeout 30 npm test)",
+      "Bash(find:*)",
+      "Bash(cargo check:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
