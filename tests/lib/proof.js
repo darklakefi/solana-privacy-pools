@@ -280,7 +280,7 @@ async function generateWithdrawProof(
     
     // Map to our expected format
     // Circuit outputs: [newCommitmentHash, existingNullifierHash]
-    // withdraw-simple.js expects publicSignals to be an array
+    // withdraw.js expects publicSignals to be an array
     return {
         proof: { 
             proofA: new Uint8Array(proofA),

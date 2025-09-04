@@ -23,8 +23,8 @@ const {
     // Withdraw operations
     ragequit,
     withdraw,
+    withdrawSimple,
 } = require('./lib');
-const { withdrawSimple } = require('./lib/withdraw-simple');
 
 console.log('=== Privacy Pool Test with Library ===');
 console.log('Program ID:', programKeypair.publicKey.toBase58());
