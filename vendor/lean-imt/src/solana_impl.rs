@@ -18,10 +18,28 @@ pub const MAX_TREE_DEPTH: usize = 20;
 
 // Helper function to hash two nodes using Poseidon
 fn hash_two(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    poseidon_ark_vendored::poseidon_hash_two(left, right)
+    use pinocchio_log::log;
+    
+    log!("hash_two called with left[0]={}, right[0]={}", left[0], right[0]);
+    
+    // Use the poseidon_ark_vendored implementation
+    let result = poseidon_ark_vendored::poseidon_hash_two(left, right);
+    
+    // Check if we got zeros (which means the hash failed)
+    if result == [0u8; 32] {
+        log!("WARNING: Poseidon hash returned all zeros!");
+        log!("Left: [{}, {}, {}, {}, {}, {}, {}, {}]", 
+             left[0], left[1], left[2], left[3], left[4], left[5], left[6], left[7]);
+        log!("Right: [{}, {}, {}, {}, {}, {}, {}, {}]", 
+             right[0], right[1], right[2], right[3], right[4], right[5], right[6], right[7]);
+    } else {
+        log!("Hash success: result[0]={}", result[0]);
+    }
+    
+    result
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct LeanIMT {
     pub size: u64,
@@ -69,8 +87,11 @@ impl LeanIMT {
             if ((index >> level) & 1) == 1 {
                 // If the bit at position `level` is 1, hash with the side node
                 let side_node = self.side_nodes[level];
+                log!("Level {}: Hashing side_node[0]={} with node[0]={}", 
+                     level, side_node[0], node[0]);
                 // Use Poseidon hash
                 node = hash_two(&side_node, &node);
+                log!("Level {}: Result node[0]={}", level, node[0]);
             } else {
                 // Else, store the node as side node
                 self.side_nodes[level] = node;

@@ -1,4 +1,4 @@
-pragma circom 2.1.9;
+pragma circom 2.2.0;
 
 include "./commitment.circom";
 include "./merkleTree.circom";
@@ -110,5 +110,3 @@ template Withdraw(maxTreeDepth) {
   // 9. Square context for integrity
   signal contextSquared <== context * context;
 }
-
-component main = Withdraw(20);

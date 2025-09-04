@@ -88,15 +88,13 @@ pub fn compute_precommitment(nullifier: &[u8; 32], secret: &[u8; 32]) -> [u8; 32
 }
 
 /// Compute context hash for withdrawal integrity
-/// context = keccak256(abi.encode(_withdrawal, SCOPE)) % SNARK_SCALAR_FIELD
-pub fn compute_context(withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32] {
+/// Circuit expects: context = keccak256("IPrivacyPool.Withdrawal", scope) % SNARK_SCALAR_FIELD
+pub fn compute_context(_withdrawal: &WithdrawalData, scope: &[u8; 32]) -> [u8; 32] {
     use pinocchio::syscalls::sol_keccak256;
 
-    // Concatenate all data for hashing
+    // Match what the circuit expects: just the prefix and scope
     let mut data = Vec::new();
     data.extend_from_slice(b"IPrivacyPool.Withdrawal");
-    data.extend_from_slice(withdrawal.processooor.as_ref());
-    data.extend_from_slice(&withdrawal.data);
     data.extend_from_slice(scope);
 
     // Compute keccak256 hash

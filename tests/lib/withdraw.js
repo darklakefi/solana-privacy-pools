@@ -91,14 +91,41 @@ async function withdraw(
         programId: programKeypair.publicKey,
     });
     
-    // Build withdraw instruction data
-    // Format: instruction_type (1) + withdrawnValue (8) + proof data (256) + public signals (256)
-    const withdrawData = Buffer.alloc(521);
+    // Build withdraw instruction data matching Rust parser expectations:
+    // 1 byte: instruction type
+    // 32 bytes: processor pubkey
+    // 4 bytes: withdrawal data length
+    // N bytes: withdrawal data (for now just the withdrawn value as 8 bytes)
+    // 64 bytes: proof_a
+    // 128 bytes: proof_b
+    // 64 bytes: proof_c
+    // 4 bytes: public signals count
+    // 8 * 32 bytes: public signals
+    
+    const processorPubkey = user.publicKey; // For now, user is the processor
+    const withdrawalDataBytes = Buffer.alloc(8);
+    withdrawalDataBytes.writeBigUInt64LE(withdrawnValue, 0);
+    
+    const totalSize = 1 + 32 + 4 + withdrawalDataBytes.length + 64 + 128 + 64 + 4 + (8 * 32);
+    console.log(`    Debug: totalSize calculated: ${totalSize}`);
+    console.log(`    Debug: publicSignals.length: ${publicSignals.length}`);
+    const withdrawData = Buffer.alloc(totalSize);
     let offset = 0;
     
+    // Instruction type
     withdrawData[offset++] = INSTRUCTIONS.WITHDRAW;
-    withdrawData.writeBigUInt64LE(withdrawnValue, offset);
-    offset += 8;
+    
+    // Processor pubkey
+    withdrawData.set(processorPubkey.toBuffer(), offset);
+    offset += 32;
+    
+    // Withdrawal data length
+    withdrawData.writeUInt32LE(withdrawalDataBytes.length, offset);
+    offset += 4;
+    
+    // Withdrawal data (just the value for now)
+    withdrawData.set(withdrawalDataBytes, offset);
+    offset += withdrawalDataBytes.length;
     
     // Add proof data
     withdrawData.set(proof.proofA, offset);
@@ -108,11 +135,17 @@ async function withdraw(
     withdrawData.set(proof.proofC, offset);
     offset += 64;
     
+    // Public signals count
+    withdrawData.writeUInt32LE(8, offset);
+    offset += 4;
+    
     // Add public signals (8 * 32 bytes)
     for (const signal of publicSignals) {
         withdrawData.set(signal, offset);
         offset += 32;
     }
+    
+    console.log(`    Debug: Final offset: ${offset}, withdrawData.length: ${withdrawData.length}`);
     
     const withdrawIx = new TransactionInstruction({
         keys: [

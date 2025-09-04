@@ -13,7 +13,7 @@ const {
     createAssociatedTokenAccountInstruction,
     createSyncNativeInstruction,
 } = require('@solana/spl-token');
-const { generateCommitmentProof, computeLabel } = require('./proof');
+const { generateCommitmentProof, computeLabel, to32ByteBuffer } = require('./proof');
 const { getVaultPDA } = require('./pool');
 const { 
     programKeypair, 
@@ -124,7 +124,8 @@ async function deposit(
     depositData.set(proof.proofC, offset);
     offset += 64;
     
-    // Add public signals in circuit output order
+    // Add public signals in circuit order: [commitment, nullifierHash, value, label]
+    // Must match the order from the sym file
     depositData.set(publicSignals.commitment, offset);
     offset += 32;
     depositData.set(publicSignals.nullifierHash, offset);

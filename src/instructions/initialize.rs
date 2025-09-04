@@ -10,10 +10,7 @@ use ark_ff::{BigInteger, PrimeField};
 use ark_bn254::Fr;
 
 use crate::state::PoolStateLeanIMT;
-use crate::crypto::verifying_key::{
-    WITHDRAW_VK_ALPHA_G1, WITHDRAW_VK_BETA_G2, 
-    WITHDRAW_VK_GAMMA_G2, WITHDRAW_VK_DELTA_G2, WITHDRAW_VK_IC
-};
+use crate::crypto::verifying_key::WITHDRAW_VERIFYINGKEY;
 
 /// Compute a unique hash of the withdraw circuit's verifying key
 /// This ensures only proofs from the correct circuit can be verified
@@ -22,15 +19,15 @@ fn compute_verifier_key_hash() -> Pubkey {
     let mut vk_data = Vec::with_capacity(64 + 128 * 3 + 64 * 9);
     
     // Add alpha_g1
-    vk_data.extend_from_slice(&WITHDRAW_VK_ALPHA_G1);
+    vk_data.extend_from_slice(&WITHDRAW_VERIFYINGKEY.vk_alpha_g1);
     
     // Add beta_g2, gamma_g2, delta_g2
-    vk_data.extend_from_slice(&WITHDRAW_VK_BETA_G2);
-    vk_data.extend_from_slice(&WITHDRAW_VK_GAMMA_G2);
-    vk_data.extend_from_slice(&WITHDRAW_VK_DELTA_G2);
+    vk_data.extend_from_slice(&WITHDRAW_VERIFYINGKEY.vk_beta_g2);
+    vk_data.extend_from_slice(&WITHDRAW_VERIFYINGKEY.vk_gamme_g2);
+    vk_data.extend_from_slice(&WITHDRAW_VERIFYINGKEY.vk_delta_g2);
     
     // Add IC points
-    for ic_point in WITHDRAW_VK_IC.iter() {
+    for ic_point in WITHDRAW_VERIFYINGKEY.vk_ic.iter() {
         vk_data.extend_from_slice(ic_point);
     }
     

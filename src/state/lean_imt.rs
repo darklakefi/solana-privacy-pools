@@ -1,12 +1,5 @@
-use crate::crypto::poseidon;
-
 // Use the vendored LeanIMT implementation
 pub use lean_imt::solana_impl::{LeanIMT, IMTNode, MAX_TREE_DEPTH};
-
-// Helper function for Poseidon hash
-pub fn poseidon_hash(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    poseidon::hash_two(left, right)
-}
 
 // Create a new LeanIMT (always uses Poseidon hash)
 pub fn new_poseidon_tree() -> LeanIMT {

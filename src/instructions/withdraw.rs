@@ -75,7 +75,22 @@ pub fn withdraw(
     
     // Verify the context
     let expected_context = crate::crypto::poseidon::compute_context(&withdrawal_data, &pool_state.scope);
-    if expected_context != proof_data.context() {
+    let proof_context = proof_data.context();
+    
+    // Debug logging - convert first few bytes to hex for display
+    log!("Context verification:");
+    log!("  Expected context first 4 bytes: {} {} {} {}", 
+        expected_context[0], expected_context[1], expected_context[2], expected_context[3]);
+    log!("  Proof context first 4 bytes: {} {} {} {}", 
+        proof_context[0], proof_context[1], proof_context[2], proof_context[3]);
+    log!("  Withdrawal data len: {}", withdrawal_data.data.len());
+    log!("  Processor first 4 bytes: {} {} {} {}",
+        withdrawal_data.processooor.as_ref()[0],
+        withdrawal_data.processooor.as_ref()[1], 
+        withdrawal_data.processooor.as_ref()[2],
+        withdrawal_data.processooor.as_ref()[3]);
+    
+    if expected_context != proof_context {
         log!("Context mismatch");
         return Err(ProgramError::InvalidArgument);
     }

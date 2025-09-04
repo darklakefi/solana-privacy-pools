@@ -26,6 +26,10 @@ pub enum PrivacyPoolInstruction {
         left: [u8; 32],
         right: [u8; 32],
     },
+    DebugTree {
+        op_type: u8,
+        value: Option<[u8; 32]>,
+    },
 }
 
 #[derive(Debug)]
@@ -54,35 +58,47 @@ pub struct CommitmentProofData {
 }
 
 impl WithdrawProofData {
-    pub fn withdrawn_value(&self) -> u64 {
-        u64::from_le_bytes(self.public_signals[0][..8].try_into().unwrap_or([0u8; 8]))
-    }
-
-    pub fn state_root(&self) -> [u8; 32] {
-        self.public_signals[1]
-    }
-
-    pub fn state_tree_depth(&self) -> u8 {
-        self.public_signals[2][0]
-    }
-
-    pub fn asp_root(&self) -> [u8; 32] {
-        self.public_signals[3]
-    }
-
-    pub fn asp_tree_depth(&self) -> u8 {
-        self.public_signals[4][0]
-    }
-
-    pub fn context(&self) -> [u8; 32] {
-        self.public_signals[5]
-    }
-
+    // Circuit public signal order (8 total):
+    // [0]: new commitment hash
+    // [1]: existing nullifier hash  
+    // [2]: withdrawn value
+    // [3]: state root
+    // [4]: state tree depth
+    // [5]: ASP root
+    // [6]: ASP tree depth
+    // [7]: context
+    
     pub fn new_commitment_hash(&self) -> [u8; 32] {
-        self.public_signals[6]
+        self.public_signals[0]
     }
 
     pub fn existing_nullifier_hash(&self) -> [u8; 32] {
+        self.public_signals[1]
+    }
+    
+    pub fn withdrawn_value(&self) -> u64 {
+        // Withdrawn value is at index 2, stored as 32 bytes with value in last 8 bytes (big-endian)
+        let value_bytes = &self.public_signals[2];
+        u64::from_be_bytes(value_bytes[24..32].try_into().unwrap_or([0u8; 8]))
+    }
+
+    pub fn state_root(&self) -> [u8; 32] {
+        self.public_signals[3]
+    }
+
+    pub fn state_tree_depth(&self) -> u8 {
+        self.public_signals[4][0]
+    }
+
+    pub fn asp_root(&self) -> [u8; 32] {
+        self.public_signals[5]
+    }
+
+    pub fn asp_tree_depth(&self) -> u8 {
+        self.public_signals[6][0]
+    }
+
+    pub fn context(&self) -> [u8; 32] {
         self.public_signals[7]
     }
 }
@@ -303,6 +319,26 @@ impl BorshDeserialize for PrivacyPoolInstruction {
                     .map_err(|_| ProgramError::InvalidInstructionData)?;
 
                 Ok(PrivacyPoolInstruction::TestPoseidon { left, right })
+            }
+            100 => {
+                // Debug Tree instruction for testing LeanIMT state persistence
+                if data.len() < 2 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                
+                let op_type = data[1];
+                let value = if op_type == 0 {
+                    // Insert operation needs a value
+                    if data.len() < 2 + 32 {
+                        return Err(ProgramError::InvalidInstructionData);
+                    }
+                    Some(<[u8; 32]>::try_from(&data[2..34])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?)
+                } else {
+                    None
+                };
+                
+                Ok(PrivacyPoolInstruction::DebugTree { op_type, value })
             }
             _ => Err(ProgramError::InvalidInstructionData),
         }

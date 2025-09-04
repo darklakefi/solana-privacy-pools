@@ -1,5 +1,6 @@
 use pinocchio::{account_info::AccountInfo, pubkey::Pubkey, ProgramResult};
 
+pub mod debug_tree;
 pub mod deposit;
 pub mod initialize;
 pub mod ragequit;
@@ -49,6 +50,18 @@ pub fn process_instruction(
 
         PrivacyPoolInstruction::TestPoseidon { left, right } => {
             test_poseidon::test_poseidon(left, right)
+        }
+
+        PrivacyPoolInstruction::DebugTree { op_type, value } => {
+            // Only support insert operation for debugging
+            if op_type != 0 {
+                return Err(pinocchio::program_error::ProgramError::InvalidInstructionData);
+            }
+            
+            let insert_value = value
+                .ok_or(pinocchio::program_error::ProgramError::InvalidInstructionData)?;
+            
+            debug_tree::debug_tree_insert(program_id, accounts, insert_value)
         }
     }
 }

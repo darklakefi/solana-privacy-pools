@@ -7,7 +7,7 @@ const { buildBn128, utils } = require('ffjavascript');
 const { unstringifyBigInts } = utils;
 
 // Circuit paths
-const COMMITMENT_WASM = path.join(__dirname, '../../build/commitment/commitment_js/commitment.wasm');
+const COMMITMENT_WASM = path.join(__dirname, '../../build/commitment/commitment_main_js/commitment_main.wasm');
 const COMMITMENT_ZKEY = path.join(__dirname, '../../build/commitment/groth16_pkey.zkey');
 const COMMITMENT_VKEY = path.join(__dirname, '../../build/commitment/groth16_vkey.json');
 
@@ -152,8 +152,7 @@ async function generateCommitmentProof(value, label, nullifier, secret) {
         return to32ByteBuffer(BigInt(signal));
     });
     
-    // Map to our expected format
-    // Circuit outputs: [commitment, nullifierHash, value, label]
+    // Circuit public signals order (from sym file): [commitment, nullifierHash, value, label]
     return {
         proof: { 
             proofA: new Uint8Array(proofA),
@@ -161,10 +160,10 @@ async function generateCommitmentProof(value, label, nullifier, secret) {
             proofC: new Uint8Array(proofC)
         },
         publicSignals: {
-            value: formattedPublicSignals[2],
-            label: formattedPublicSignals[3],
             commitment: formattedPublicSignals[0],
-            nullifierHash: formattedPublicSignals[1]
+            nullifierHash: formattedPublicSignals[1],
+            value: formattedPublicSignals[2],
+            label: formattedPublicSignals[3]
         },
         rawProof: proof,
         rawPublicSignals: publicSignals
@@ -202,25 +201,7 @@ async function generateWithdrawProof(
     ASPIndex
 ) {
     if (!fs.existsSync(WITHDRAW_WASM) || !fs.existsSync(WITHDRAW_ZKEY)) {
-        console.log('   ⚠️  Withdraw circuit files not found, using mock proof for testing');
-        // Return mock proof for testing
-        return {
-            proof: {
-                proofA: new Uint8Array(64),
-                proofB: new Uint8Array(128),
-                proofC: new Uint8Array(64)
-            },
-            publicSignals: {
-                withdrawnValue: Buffer.alloc(32),
-                stateRoot: Buffer.alloc(32),
-                stateTreeDepth: Buffer.alloc(32),
-                ASPRoot: Buffer.alloc(32),
-                ASPTreeDepth: Buffer.alloc(32),
-                context: Buffer.alloc(32),
-                newCommitmentHash: Buffer.alloc(32),
-                existingNullifierHash: Buffer.alloc(32)
-            }
-        };
+        throw new Error(`Withdraw circuit files not found! Expected files at:\n  ${WITHDRAW_WASM}\n  ${WITHDRAW_ZKEY}`);
     }
     
     // Prepare witness input
@@ -299,23 +280,14 @@ async function generateWithdrawProof(
     
     // Map to our expected format
     // Circuit outputs: [newCommitmentHash, existingNullifierHash]
-    // Public inputs: [withdrawnValue, stateRoot, stateTreeDepth, ASPRoot, ASPTreeDepth, context]
+    // withdraw-simple.js expects publicSignals to be an array
     return {
         proof: { 
             proofA: new Uint8Array(proofA),
             proofB: new Uint8Array(proofB),
             proofC: new Uint8Array(proofC)
         },
-        publicSignals: {
-            withdrawnValue: formattedPublicSignals[0],
-            stateRoot: formattedPublicSignals[1],
-            stateTreeDepth: formattedPublicSignals[2],
-            ASPRoot: formattedPublicSignals[3],
-            ASPTreeDepth: formattedPublicSignals[4],
-            context: formattedPublicSignals[5],
-            newCommitmentHash: formattedPublicSignals[6],
-            existingNullifierHash: formattedPublicSignals[7]
-        },
+        publicSignals: formattedPublicSignals,
         rawProof: proof,
         rawPublicSignals: publicSignals
     };
