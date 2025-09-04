@@ -1,24 +1,23 @@
 {
   "name": "solana-privacy-pools",
   "version": "0.1.0",
+  "private": true,
   "description": "Privacy pools implementation for Solana using Groth16",
+  "workspaces": [
+    "client",
+    "tests-package"
+  ],
   "scripts": {
     "build:circuits": "./build-circuits.sh",
     "build:program": "cargo build-sbf --release",
     "build": "./build.sh",
     "clean": "rm -rf build target",
+    "test": "npm run test --workspace=tests-package",
     "test:validator": "./test-with-validator.sh"
   },
   "devDependencies": {
     "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
     "snarkjs": "^0.7.4"
-  },
-  "dependencies": {
-    "@solana/spl-token": "^0.4.1",
-    "@solana/web3.js": "^1.91.4",
-    "@zk-kit/lean-imt": "^2.2.4",
-    "ffjavascript": "^0.3.1",
-    "litesvm": "^0.2.0"
   }
 }

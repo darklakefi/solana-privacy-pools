@@ -11,7 +11,7 @@ const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088548364400416
 // Load program keypair from deploy artifacts
 const programKeypair = Keypair.fromSecretKey(
     new Uint8Array(JSON.parse(fs.readFileSync(
-        path.join(__dirname, '../../target/deploy/solana_privacy_pools-keypair.json')
+        path.join(__dirname, '../target/deploy/solana_privacy_pools-keypair.json')
     )))
 );
 

@@ -24,7 +24,7 @@ const {
     ragequit,
     withdraw,
     withdrawSimple,
-} = require('./lib');
+} = require('@solana-privacy-pools/client');
 
 console.log('=== Privacy Pool Test with Library ===');
 console.log('Program ID:', programKeypair.publicKey.toBase58());

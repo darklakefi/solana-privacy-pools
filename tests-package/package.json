@@ -1,0 +1,18 @@
+{
+  "name": "@solana-privacy-pools/tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tests for Solana Privacy Pools",
+  "scripts": {
+    "test": "mocha privacy-pool.test.js",
+    "test:validator": "../test-with-validator.sh"
+  },
+  "dependencies": {
+    "@solana-privacy-pools/client": "^0.1.0",
+    "@solana/spl-token": "^0.4.1",
+    "@solana/web3.js": "^1.91.4"
+  },
+  "devDependencies": {
+    "mocha": "^10.2.0"
+  }
+}
