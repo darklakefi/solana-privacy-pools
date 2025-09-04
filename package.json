@@ -5,7 +5,8 @@
   "description": "Privacy pools implementation for Solana using Groth16",
   "workspaces": [
     "client",
-    "tests-package"
+    "tests-package",
+    "web"
   ],
   "scripts": {
     "build:circuits": "./build-circuits.sh",
