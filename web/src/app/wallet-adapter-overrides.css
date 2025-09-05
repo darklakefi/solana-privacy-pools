@@ -1,0 +1,100 @@
+/* Darklake Wallet Adapter Theme Overrides */
+
+/* Modal Background */
+.wallet-adapter-modal-wrapper {
+  background-color: rgba(0, 0, 0, 0.95) !important;
+}
+
+/* Modal Container */
+.wallet-adapter-modal {
+  background-color: #111214 !important;
+  border: 1px solid rgba(44, 255, 142, 0.2) !important;
+  border-radius: 12px !important;
+}
+
+/* Modal Title */
+.wallet-adapter-modal-title {
+  color: #2CFF8E !important;
+  font-family: 'Helvetica', system-ui, sans-serif !important;
+  font-size: 24px !important;
+}
+
+/* Wallet List Container */
+.wallet-adapter-modal-list {
+  margin: 20px 0 !important;
+}
+
+/* Wallet Buttons */
+.wallet-adapter-button {
+  background-color: #000000 !important;
+  border: 1px solid rgba(44, 255, 142, 0.2) !important;
+  border-radius: 8px !important;
+  color: #FFFFFF !important;
+  font-family: 'Helvetica', system-ui, sans-serif !important;
+  padding: 12px 16px !important;
+  transition: all 0.2s ease !important;
+}
+
+.wallet-adapter-button:hover {
+  background-color: rgba(44, 255, 142, 0.1) !important;
+  border-color: #2CFF8E !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Wallet Button Start Icon */
+.wallet-adapter-button-start-icon {
+  margin-right: 12px !important;
+}
+
+/* Detected Wallet Badge */
+.wallet-adapter-modal-list-more {
+  color: #667EF1 !important;
+  font-family: 'Helvetica Light', system-ui, sans-serif !important;
+}
+
+/* Collapse Button */
+.wallet-adapter-modal-collapse-button {
+  background-color: transparent !important;
+  border: 1px solid rgba(44, 255, 142, 0.2) !important;
+  color: #2CFF8E !important;
+  border-radius: 8px !important;
+  margin-top: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+.wallet-adapter-modal-collapse-button:hover {
+  background-color: rgba(44, 255, 142, 0.1) !important;
+  border-color: #2CFF8E !important;
+}
+
+/* Close Button */
+.wallet-adapter-modal-button-close {
+  color: #FFFFFF !important;
+  background-color: transparent !important;
+  transition: color 0.2s ease !important;
+}
+
+.wallet-adapter-modal-button-close:hover {
+  color: #2CFF8E !important;
+}
+
+/* Middle Content (How to Connect) */
+.wallet-adapter-modal-middle {
+  color: #FFFFFF !important;
+}
+
+.wallet-adapter-modal-middle-button {
+  background-color: #2CFF8E !important;
+  color: #000000 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-family: 'Helvetica', system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.wallet-adapter-modal-middle-button:hover {
+  background-color: #35D688 !important;
+  transform: scale(1.05) !important;
+}
