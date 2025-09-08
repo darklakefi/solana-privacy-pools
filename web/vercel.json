@@ -1,0 +1,17 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "cd .. && npm install && cd web && npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "cd .. && npm install",
+  "devCommand": "npm run dev",
+  "env": {
+    "APP_ENV": "dev",
+    "NEXT_PUBLIC_APP_ENV": "dev"
+  },
+  "build": {
+    "env": {
+      "APP_ENV": "dev",
+      "NEXT_PUBLIC_APP_ENV": "dev"
+    }
+  }
+}
