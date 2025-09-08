@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* Custom Font Imports */
 @font-face {
@@ -6,7 +8,7 @@
   src: url('/fonts/bitsumishi.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
-  font-display: block; /* Changed from swap to block for critical fonts */
+  font-display: block;
 }
 
 @font-face {
@@ -14,7 +16,7 @@
   src: url('/fonts/clacon2.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
-  font-display: optional; /* Optional for non-critical decorative font */
+  font-display: optional;
 }
 
 @font-face {
@@ -22,8 +24,8 @@
   src: url('/fonts/Helvetica.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
-  font-display: block; /* Block for main body font to prevent flash */
-  size-adjust: 100%; /* Prevents layout shift */
+  font-display: block;
+  size-adjust: 100%;
 }
 
 @font-face {
@@ -44,84 +46,16 @@
   size-adjust: 100%;
 }
 
-:root {
-  /* Darklake Brand Colors */
-  --darklake-primary: #2CFF8E;
-  --darklake-primary-dark: #35D688;
-  --darklake-secondary: #667EF1;
-  --darklake-secondary-dark: #00318C;
-  --darklake-dark: #111214;
-  --darklake-black: #000000;
-  --darklake-white: #FFFFFF;
-  
-  /* Default Light Theme */
-  --background: #FFFFFF;
-  --foreground: #111214;
-}
-
-@theme inline {
-  /* Darklake Brand Colors */
-  --color-primary: #2CFF8E;
-  --color-primary-dark: #35D688;
-  --color-secondary: #667EF1;
-  --color-secondary-dark: #00318C;
-  --color-dark: #111214;
-  --color-black: #000000;
-  --color-white: #FFFFFF;
-  
-  /* Background and Text */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  
-  /* Font Families */
-  --font-display: 'Bitsumishi', system-ui, sans-serif;
-  --font-mono: 'Classic Console Neue', 'Courier New', monospace;
-  --font-sans: 'Helvetica', system-ui, sans-serif;
-  --font-light: 'Helvetica Light', 'Helvetica', system-ui, sans-serif;
-  
-  /* Typography Scale */
-  --text-xs: 0.75rem;     /* 12px */
-  --text-sm: 0.875rem;    /* 14px */
-  --text-base: 1rem;      /* 16px */
-  --text-lg: 1.125rem;    /* 18px */
-  --text-xl: 1.25rem;     /* 20px */
-  --text-2xl: 1.5rem;     /* 24px */
-  --text-3xl: 1.875rem;   /* 30px */
-  --text-4xl: 2.25rem;    /* 36px */
-  --text-5xl: 3rem;       /* 48px */
-  --text-6xl: 3.75rem;    /* 60px */
-  --text-7xl: 4.5rem;     /* 72px */
-  --text-8xl: 6rem;       /* 96px */
-  --text-9xl: 8rem;       /* 128px */
-  --text-hero: 11.25rem;  /* 180px - for big announcements */
-  
-  /* Line Heights */
-  --leading-none: 1;
-  --leading-tight: 1.25;
-  --leading-snug: 1.375;
-  --leading-normal: 1.5;
-  --leading-relaxed: 1.625;
-  --leading-loose: 2;
-  
-  /* Letter Spacing */
-  --tracking-tighter: -0.05em;
-  --tracking-tight: -0.025em;
-  --tracking-normal: 0;
-  --tracking-wide: 0.025em;
-  --tracking-wider: 0.05em;
-  --tracking-widest: 0.1em;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #111214;
-    --foreground: #FFFFFF;
+    --color-primary: #2CFF8E;
+    --color-primary-dark: #35D688;
+    --color-secondary: #667EF1;
+    --color-secondary-dark: #00318C;
+    --color-dark: #111214;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  line-height: var(--leading-normal);
+  body {
+    @apply bg-black text-white font-sans antialiased;
+  }
 }

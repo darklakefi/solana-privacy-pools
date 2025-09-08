@@ -9,9 +9,7 @@ import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { clusterApiUrl } from "@solana/web3.js";
 
-// Import wallet adapter styles
-import "@solana/wallet-adapter-react-ui/styles.css";
-import "./wallet-adapter-overrides.css";
+// Wallet adapter styles are imported in _app.tsx
 
 // Determine network based on APP_ENV environment variable
 const getNetwork = (): WalletAdapterNetwork => {

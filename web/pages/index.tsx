@@ -1,10 +1,8 @@
-"use client";
-
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { WalletButton } from "@/components/WalletButton";
-import { NetworkIndicator } from "@/components/NetworkIndicator";
+import { WalletButton } from "../src/components/WalletButton";
+import { NetworkIndicator } from "../src/components/NetworkIndicator";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 export default function Home() {
@@ -20,14 +18,16 @@ export default function Home() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <Link href="/" className="flex items-center">
-              <Image 
-                src="/darklake-logo.svg" 
-                alt="Darklake" 
-                width={120} 
-                height={98}
-                className="h-10 w-auto"
-              />
+            <Link href="/">
+              <a className="flex items-center">
+                <Image 
+                  src="/darklake-logo.svg" 
+                  alt="Darklake" 
+                  width={120} 
+                  height={40}
+                  className="h-10 w-auto"
+                />
+              </a>
             </Link>
 
             {/* Menu and Connect */}
@@ -224,25 +224,25 @@ export default function Home() {
         {/* Footer Links */}
         <footer className="mt-12 py-6 border-t border-primary/10">
           <nav className="flex flex-wrap items-center justify-center gap-4 text-sm">
-            <Link href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4563364" target="_blank" className="text-gray-400 hover:text-primary transition-colors">
+            <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4563364" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               White Paper
-            </Link>
+            </a>
             <span className="text-gray-600">|</span>
-            <Link href="https://docs.privacypools.com" target="_blank" className="text-gray-400 hover:text-primary transition-colors">
+            <a href="https://docs.privacypools.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               Docs
-            </Link>
+            </a>
             <span className="text-gray-600">|</span>
-            <Link href="https://x.com/darklakefi" target="_blank" className="text-gray-400 hover:text-primary transition-colors">
+            <a href="https://x.com/darklakefi" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               X
-            </Link>
+            </a>
             <span className="text-gray-600">|</span>
-            <Link href="https://docs.google.com/forms" target="_blank" className="text-gray-400 hover:text-primary transition-colors">
+            <a href="https://docs.google.com/forms" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               Support
-            </Link>
+            </a>
             <span className="text-gray-600">|</span>
-            <Link href="https://github.com/darklakefi" target="_blank" className="text-gray-400 hover:text-primary transition-colors">
+            <a href="https://github.com/darklakefi" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               Github
-            </Link>
+            </a>
             <span className="text-gray-600">|</span>
             <button className="text-gray-400 hover:text-primary transition-colors">
               Newsletter

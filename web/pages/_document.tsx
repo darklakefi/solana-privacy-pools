@@ -1,20 +1,9 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import { Providers } from "./providers";
+import { Html, Head, Main, NextScript } from "next/document";
 
-export const metadata: Metadata = {
-  title: "Darklake Privacy Pools",
-  description: "Zero-knowledge privacy pools on Solana",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function Document() {
   return (
-    <html lang="en">
-      <head>
+    <Html lang="en">
+      <Head>
         {/* Preload critical fonts to prevent FOUT */}
         <link
           rel="preload"
@@ -51,10 +40,11 @@ export default function RootLayout({
           type="font/ttf"
           crossOrigin="anonymous"
         />
-      </head>
+      </Head>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        <Main />
+        <NextScript />
       </body>
-    </html>
+    </Html>
   );
 }
