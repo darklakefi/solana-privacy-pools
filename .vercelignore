@@ -1,0 +1,41 @@
+# Ignore test files and directories
+test-ledger/
+tests-package/
+*.test.js
+*.test.ts
+
+# Ignore Rust/Solana program files
+programs/
+target/
+Cargo.toml
+Cargo.lock
+
+# Ignore circuit build files
+circuits/
+build-circuits.sh
+*.circom
+*.r1cs
+*.sym
+*.zkey
+
+# Ignore development files
+.anchor/
+node_modules/
+.git/
+.github/
+
+# Ignore other workspace packages that aren't the web app
+client/
+
+# Ignore local environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore logs and temp files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
