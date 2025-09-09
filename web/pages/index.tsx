@@ -3,12 +3,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { WalletButton } from "../src/components/WalletButton";
 import { NetworkIndicator } from "../src/components/NetworkIndicator";
+import { DepositModal } from "../src/components/DepositModal";
+import { WithdrawModal } from "../src/components/WithdrawModal";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState("SOL");
   const [activityTab, setActivityTab] = useState("global");
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const { connected, publicKey } = useWallet();
 
   return (
@@ -108,10 +112,16 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <button className="bg-primary text-black px-4 py-3 rounded-lg font-sans hover:bg-primary-dark transition-colors">
+                    <button 
+                      onClick={() => setShowDepositModal(true)}
+                      className="bg-primary text-black px-4 py-3 rounded-lg font-sans hover:bg-primary-dark transition-colors"
+                    >
                       Deposit
                     </button>
-                    <button className="border border-primary text-primary px-4 py-3 rounded-lg font-sans hover:bg-primary/10 transition-colors">
+                    <button 
+                      onClick={() => setShowWithdrawModal(true)}
+                      className="border border-primary text-primary px-4 py-3 rounded-lg font-sans hover:bg-primary/10 transition-colors"
+                    >
                       Withdraw
                     </button>
                   </div>
@@ -258,6 +268,10 @@ export default function Home() {
         </svg>
         <span>Report a Bug</span>
       </button>
+
+      {/* Modals */}
+      <DepositModal isOpen={showDepositModal} onClose={() => setShowDepositModal(false)} />
+      <WithdrawModal isOpen={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} />
     </div>
   );
 }
