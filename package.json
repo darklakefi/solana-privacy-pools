@@ -20,9 +20,12 @@
     "test:validator": "./test-with-validator.sh"
   },
   "devDependencies": {
+    "autoprefixer": "^10.4.16",
     "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
-    "snarkjs": "^0.7.4"
+    "postcss": "^8.4.31",
+    "snarkjs": "^0.7.4",
+    "tailwindcss": "^3.4.1"
   },
   "dependencies": {
     "react": "16.14.0",
