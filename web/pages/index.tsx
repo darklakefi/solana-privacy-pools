@@ -270,8 +270,16 @@ export default function Home() {
       </button>
 
       {/* Modals */}
-      <DepositModal isOpen={showDepositModal} onClose={() => setShowDepositModal(false)} />
-      <WithdrawModal isOpen={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} />
+      <DepositModal 
+        isOpen={showDepositModal} 
+        onClose={() => setShowDepositModal(false)} 
+        selectedToken={selectedToken}
+      />
+      <WithdrawModal 
+        isOpen={showWithdrawModal} 
+        onClose={() => setShowWithdrawModal(false)} 
+        selectedToken={selectedToken}
+      />
     </div>
   );
 }

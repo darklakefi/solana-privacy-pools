@@ -4,8 +4,6 @@ import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 // Import the client functions on the server side where fs is available
 const { deposit, initializePool } = require('@solana-privacy-pools/client');
 
-const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -13,7 +11,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { 
-      userPublicKey, 
+      userPublicKey,
+      tokenMint,
       amount, 
       nonce, 
       scope,
@@ -27,11 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       (process.env.APP_ENV === 'prod' ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com');
     const connection = new Connection(rpcEndpoint, 'confirmed');
 
-    // Parse user public key
+    // Parse user public key and token mint
     const userPubkey = new PublicKey(userPublicKey);
+    const mintPubkey = new PublicKey(tokenMint);
     
     // Derive pool state account
-    const poolStateSeed = `ps-${WSOL_MINT.toBase58().slice(0, 29)}`;
+    const poolStateSeed = `ps-${mintPubkey.toBase58().slice(0, 29)}`;
     const poolStateAccount = await PublicKey.createWithSeed(
       userPubkey,
       poolStateSeed,
@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const initResult = await initializePool(
         connection,
         { publicKey: userPubkey },
-        WSOL_MINT
+        mintPubkey
       );
       actualPoolState = initResult.poolStateAccount;
     } else if (!poolAccountInfo) {
@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       BigInt(amount),
       nonce,
       scope,
-      WSOL_MINT,
+      mintPubkey,
       nullifier ? BigInt(nullifier) : undefined,
       secret ? BigInt(secret) : undefined
     );

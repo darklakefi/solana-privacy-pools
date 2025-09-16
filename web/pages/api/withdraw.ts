@@ -4,8 +4,6 @@ import { Connection, PublicKey } from '@solana/web3.js';
 // Import the client functions on the server side where fs is available
 const { withdrawSimple } = require('@solana-privacy-pools/client');
 
-const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -14,6 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { 
       userPublicKey,
+      tokenMint,
       amount,
       nullifier,
       secret,
@@ -27,11 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       (process.env.APP_ENV === 'prod' ? 'https://api.mainnet-beta.solana.com' : 'https://api.devnet.solana.com');
     const connection = new Connection(rpcEndpoint, 'confirmed');
 
-    // Parse user public key
+    // Parse user public key and token mint
     const userPubkey = new PublicKey(userPublicKey);
+    const mintPubkey = new PublicKey(tokenMint);
     
     // Derive pool state account
-    const poolStateSeed = `ps-${WSOL_MINT.toBase58().slice(0, 29)}`;
+    const poolStateSeed = `ps-${mintPubkey.toBase58().slice(0, 29)}`;
     const poolStateAccount = await PublicKey.createWithSeed(
       userPubkey,
       poolStateSeed,
@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       nonce,
       scope,
       recipientPubkey,
-      WSOL_MINT
+      mintPubkey
     );
 
     res.status(200).json({
