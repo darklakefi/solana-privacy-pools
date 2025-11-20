@@ -84,6 +84,11 @@ async function withdrawSimple(
   }
 
   console.log("    Debug: Found deposit at index:", depositIndex);
+  console.log("    Debug: depositInfo.commitment:", depositInfo.commitment.toString('hex').slice(0, 16) + '...');
+  console.log("    Debug: allDeposits[depositIndex].commitment:",
+    Buffer.isBuffer(allDeposits[depositIndex].commitment)
+      ? allDeposits[depositIndex].commitment.toString('hex').slice(0, 16) + '...'
+      : 'not a buffer');
   const merkleProofs = await generateMerkleProofs(allDeposits, depositIndex);
   console.log("    Debug: Generated merkle proofs");
 
@@ -107,6 +112,21 @@ async function withdrawSimple(
   console.log(
     "    Debug: State root from merkle:",
     merkleProofs.stateRoot.toString(16).slice(0, 16) + "...",
+  );
+
+  // Also check ASP root
+  const aspRootFromPool = poolState.aspTree.root;
+  let aspRootFromPoolBigInt = BigInt(0);
+  for (let i = 0; i < 32; i++) {
+    aspRootFromPoolBigInt = (aspRootFromPoolBigInt << 8n) | BigInt(aspRootFromPool[i]);
+  }
+  console.log(
+    "    Debug: ASP root from pool:",
+    aspRootFromPoolBigInt.toString(16).slice(0, 16) + "...",
+  );
+  console.log(
+    "    Debug: ASP root from merkle:",
+    merkleProofs.aspRoot.toString(16).slice(0, 16) + "...",
   );
 
   // Use the actual pool state root, not our computed one

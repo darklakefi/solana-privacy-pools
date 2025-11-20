@@ -40,12 +40,22 @@ async function buildMerkleTrees(deposits) {
         stateTree.insert(commitmentBigInt);
     }
     
-    // Add all labels to ASP tree
+    // Add all labels to ASP tree (skip null labels from withdrawal commitments)
+    let skippedLabels = 0;
     for (const deposit of deposits) {
         // Label is already a BigInt
-        aspTree.insert(deposit.label);
+        // Skip null labels (from withdrawal commitments that reuse existing labels)
+        if (deposit.label !== null && deposit.label !== undefined) {
+            aspTree.insert(deposit.label);
+        } else {
+            skippedLabels++;
+        }
     }
-    
+
+    console.log(`    Built trees: State=${stateTree.size} leaves, ASP=${aspTree.size} labels (skipped ${skippedLabels})`);
+    console.log(`    State root: ${stateTree.root.toString(16).slice(0, 16)}..., ASP root: ${aspTree.root.toString(16).slice(0, 16)}...`);
+    console.log(`    State depth: ${stateTree.depth}, ASP depth: ${aspTree.depth}`);
+
     return {
         stateTree,
         aspTree
@@ -57,12 +67,23 @@ async function buildMerkleTrees(deposits) {
  */
 async function generateMerkleProofs(deposits, depositIndex) {
     const { stateTree, aspTree } = await buildMerkleTrees(deposits);
-    
+
     // Generate proof for the commitment in state tree
     const stateProof = stateTree.generateProof(depositIndex);
-    
-    // Generate proof for the label in ASP tree  
-    const aspProof = aspTree.generateProof(depositIndex);
+
+    // Calculate ASP index (accounting for skipped null labels)
+    let aspIndex = 0;
+    for (let i = 0; i < depositIndex; i++) {
+        if (deposits[i].label !== null && deposits[i].label !== undefined) {
+            aspIndex++;
+        }
+    }
+
+    console.log(`    Debug: State tree size: ${stateTree.size}, ASP tree size: ${aspTree.size}`);
+    console.log(`    Debug: depositIndex: ${depositIndex}, calculated aspIndex: ${aspIndex}`);
+
+    // Generate proof for the label in ASP tree
+    const aspProof = aspTree.generateProof(aspIndex);
     
     // Pad siblings to 20 levels for circuit compatibility
     const padSiblings = (siblings) => {
@@ -81,7 +102,7 @@ async function generateMerkleProofs(deposits, depositIndex) {
         aspRoot: aspTree.root,
         aspTreeDepth: aspTree.depth,
         aspProof: padSiblings(aspProof.siblings),
-        aspIndex: depositIndex
+        aspIndex: aspIndex
     };
 }
 

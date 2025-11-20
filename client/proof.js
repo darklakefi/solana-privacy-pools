@@ -21,7 +21,7 @@ const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088548364400416
 // Helper function to convert BigInt to 32-byte buffer
 function to32ByteBuffer(bigInt) {
     const hexString = bigInt.toString(16).padStart(64, '0');
-    return new Uint8Array(Buffer.from(hexString, 'hex'));
+    return Buffer.from(hexString, 'hex');
 }
 
 // Convert G1 point to uncompressed format
