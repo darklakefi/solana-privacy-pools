@@ -75,7 +75,7 @@ describe('Amount Validation Tests', function() {
                     WSOL_MINT,
                     excessiveAmount // More than deposit amount
                 );
-            }, 'InsufficientBalance');
+            }, 'Error in template'); // Circuit constraint failure for withdrawn_value > existing_value
 
             console.log('  ✓ Over-withdrawal correctly rejected');
 

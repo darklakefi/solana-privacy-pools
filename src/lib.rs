@@ -56,7 +56,13 @@ pub mod constants {
     ];
     pub const MAX_TREE_DEPTH: u8 = 32;
     pub const ROOT_HISTORY_SIZE: usize = 64;
-    
+
     /// PDA seed for vault accounts (token authority)
     pub const VAULT_PDA_SEED: &[u8] = b"vault";
+
+    /// PDA seed for nullifier accounts (double-spend prevention)
+    pub const NULLIFIER_PDA_SEED: &[u8] = b"nullifier";
+
+    /// Custom error codes
+    pub const ERROR_NULLIFIER_ALREADY_SPENT: u32 = 1;
 }

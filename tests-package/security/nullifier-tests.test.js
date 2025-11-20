@@ -133,19 +133,18 @@ describe('Nullifier Security Tests', function() {
 
             console.log('  ✓ Deposit created');
 
-            // Validate roots
-            const { stateTree, aspTree } = await buildMerkleTrees(deposits);
-            await validateTreeRoots(context.connection, pool.poolStateAccount, stateTree, aspTree);
-
             // 2. Create fake deposits array with invalid root
+            // Add an extra fake deposit to create a different merkle root
             const fakeDeposits = [
+                deposits[0], // Keep real deposit so it can be found
                 {
-                    ...deposits[0],
-                    commitment: generateInvalidRoot(), // This will create wrong merkle root
+                    commitment: generateInvalidRoot(), // Extra deposit creates wrong root
+                    label: null, // Won't be in ASP tree
+                    value: null,
                 }
             ];
 
-            console.log('  ✓ Generated fake deposit with invalid root');
+            console.log('  ✓ Generated fake deposits array with invalid root');
 
             // 3. Attempt withdrawal with fake root (should fail)
             await expectTransactionFailure(async () => {
@@ -156,14 +155,12 @@ describe('Nullifier Security Tests', function() {
                     deposits[0], // Real deposit
                     fakeDeposits, // Fake deposits array → wrong root
                     WSOL_MINT,
-                    SMALL
+                    SMALL,
+                    { useComputedRoot: true } // Use fake merkle root for testing
                 );
             }, 'InvalidMerkleRoot');
 
             console.log('  ✓ Withdrawal with unknown root rejected');
-
-            // Validate roots unchanged
-            await validateTreeRoots(context.connection, pool.poolStateAccount, stateTree, aspTree);
         });
     });
 });

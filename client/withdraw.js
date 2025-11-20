@@ -11,7 +11,7 @@ const {
   getAssociatedTokenAddress,
 } = require("@solana/spl-token");
 const { generateWithdrawProof } = require("./proof");
-const { getVaultPDA } = require("./pool");
+const { getVaultPDA, getNullifierPDA } = require("./pool");
 const { generateMerkleProofs } = require("./merkle");
 const { parsePoolState } = require("./pool-parser");
 const { keccak256 } = require("js-sha3");
@@ -46,6 +46,8 @@ function reduceHashToField(hashBuffer) {
  * @param {Array} allDeposits - All deposits in the pool (for merkle tree)
  * @param {PublicKey} mint - Token mint (defaults to WSOL)
  * @param {BigInt} withdrawAmount - Optional amount to withdraw (defaults to full amount)
+ * @param {Object} options - Optional parameters
+ * @param {boolean} options.useComputedRoot - Use computed merkle root instead of pool root (for testing invalid roots)
  */
 async function withdrawSimple(
   connection,
@@ -55,6 +57,7 @@ async function withdrawSimple(
   allDeposits,
   mint = WSOL_MINT,
   withdrawAmount = null,
+  options = {},
 ) {
   // Default to withdrawing full amount
   const withdrawnValue = withdrawAmount || depositInfo.value;
@@ -129,8 +132,8 @@ async function withdrawSimple(
     merkleProofs.aspRoot.toString(16).slice(0, 16) + "...",
   );
 
-  // Use the actual pool state root, not our computed one
-  const stateRootBigInt = stateRootFromPoolBigInt;
+  // Use the actual pool state root, unless testing with computed root
+  const stateRootBigInt = options.useComputedRoot ? merkleProofs.stateRoot : stateRootFromPoolBigInt;
 
   // Compute context: keccak256(processooor_pubkey, scope) % FIELD
   const scopeBuffer = Buffer.isBuffer(poolState.scope)
@@ -217,18 +220,9 @@ async function withdrawSimple(
     merkleProofs.aspIndex,
   );
 
-  // Create nullifier state account
-  const nullifierState = Keypair.generate();
-  const nullifierRent =
-    await connection.getMinimumBalanceForRentExemption(NULLIFIER_STATE_SIZE);
-
-  const createNullifierAccountIx = SystemProgram.createAccount({
-    fromPubkey: user.publicKey,
-    newAccountPubkey: nullifierState.publicKey,
-    space: NULLIFIER_STATE_SIZE,
-    lamports: Number(nullifierRent),
-    programId: programKeypair.publicKey,
-  });
+  // Get nullifier PDA (deterministic address from nullifier hash)
+  // The program will create and fund this if it doesn't exist
+  const { nullifierPDA } = getNullifierPDA(depositInfo.nullifierHash);
 
   // Build withdraw instruction data matching Rust parser expectations:
   // 1 byte: instruction type
@@ -285,12 +279,13 @@ async function withdrawSimple(
     keys: [
       { pubkey: poolStateAccount, isSigner: false, isWritable: true },
       { pubkey: vaultPDA, isSigner: false, isWritable: false },
-      { pubkey: nullifierState.publicKey, isSigner: false, isWritable: true },
-      { pubkey: user.publicKey, isSigner: true, isWritable: false },
+      { pubkey: nullifierPDA, isSigner: false, isWritable: true },
+      { pubkey: user.publicKey, isSigner: true, isWritable: true }, // Needs to be writable to fund nullifier account
       { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
       { pubkey: userTokenAccount, isSigner: false, isWritable: true },
       { pubkey: mint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     programId: programKeypair.publicKey,
     data: withdrawData,
@@ -298,19 +293,18 @@ async function withdrawSimple(
 
   const withdrawTx = new Transaction()
     .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-    .add(createNullifierAccountIx)
     .add(withdrawIx);
 
   const txSig = await sendAndConfirmTransaction(
     connection,
     withdrawTx,
-    [user, nullifierState],
+    [user], // Only user signs, nullifier PDA doesn't need to sign
     { commitment: "confirmed" },
   );
 
   return {
     txSig,
-    nullifierState: nullifierState.publicKey,
+    nullifierState: nullifierPDA,
     nullifierHash: publicSignals[1], // Nullifier hash from proof
     newCommitment: publicSignals[0], // New commitment for change
   };

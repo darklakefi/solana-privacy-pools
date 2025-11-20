@@ -36,6 +36,22 @@ function getVaultPDA(mint) {
 }
 
 /**
+ * Get the nullifier PDA for a given nullifier hash
+ * This ensures the same nullifier always maps to the same account,
+ * enabling double-spend prevention.
+ */
+function getNullifierPDA(nullifierHash) {
+    const [nullifierPDA, nullifierBump] = PublicKey.findProgramAddressSync(
+        [
+            Buffer.from('nullifier'),
+            nullifierHash
+        ],
+        programKeypair.publicKey
+    );
+    return { nullifierPDA, nullifierBump };
+}
+
+/**
  * Get the pool state account seed
  */
 function getPoolStateSeed(mint) {
@@ -161,6 +177,7 @@ async function windDownPool(connection, poolStateAccount, authority) {
 
 module.exports = {
     getVaultPDA,
+    getNullifierPDA,
     getPoolStateSeed,
     initializePool,
     parsePoolState,

@@ -75,9 +75,18 @@ function createTestDeposit(overrides = {}) {
 
 /**
  * Create an invalid root (not in pool's root history)
+ * Returns a Buffer to match commitment format
  */
 function generateInvalidRoot() {
-    return randomFieldElement();
+    const fieldElement = randomFieldElement();
+    // Convert BigInt to 32-byte Buffer (big-endian)
+    const buffer = Buffer.alloc(32);
+    let value = fieldElement;
+    for (let i = 31; i >= 0; i--) {
+        buffer[i] = Number(value & 0xFFn);
+        value >>= 8n;
+    }
+    return buffer;
 }
 
 module.exports = {
