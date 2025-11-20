@@ -23,7 +23,53 @@ This is necessary when working in environments with cursor proxy configurations.
 - Run integration tests with validator: `npm run test:validator`
   - This script automatically restarts the validator with a fresh ledger
   - Runs the full test suite with proper validator management
+- Run specific test file: `TEST_FILE="tests-package/security/minimal-withdrawal.test.js" ./test-with-validator.sh`
 - Manual test run (if validator already running): `npx mocha tests/privacy-pool.sts.test.js`
+
+### Testing Architecture
+
+**Problem**: Solana privacy pools require integration tests (not unit tests) because `sol_poseidon` syscall only works in Solana runtime. This differs from Ethereum where circuit tests can run standalone.
+
+**Key Challenge**: Tests share a single pool across test runs, accumulating state. Manual commitment tracking (`allDeposits` array) easily diverges from actual on-chain state, causing cryptic circuit failures.
+
+**Solution**: Root Validation Approach
+1. **Track commitments locally** in each test
+2. **Validate roots against on-chain state** before building merkle proofs:
+   ```javascript
+   const { stateTree, aspTree } = await buildMerkleTrees(deposits);
+   await validateTreeRoots(connection, poolStateAccount, stateTree, aspTree);
+   ```
+3. **Fail fast** if local tracking diverges from blockchain
+4. **Build proofs** only after validation passes
+
+**Test Structure** (`tests-package/security/`):
+```
+security/
+├── minimal-withdrawal.test.js     # Validates root validation approach
+├── nullifier-tests.test.js        # Double-spend prevention, unknown roots
+├── merkle-proof-tests.test.js     # Commitment membership, tree depth
+├── amount-validation-tests.test.js # Over-withdrawal prevention
+├── asp-membership-tests.test.js   # ASP enforcement (with caveats)
+├── authorization-tests.test.js    # Ragequit authorization
+├── state-integrity-tests.test.js  # State integrity after failures
+└── helpers/
+    ├── test-setup.js              # Shared pool, users, deposits
+    ├── error-assertions.js        # expectTransactionSuccess/Failure
+    ├── state-verification.js      # capturePoolSnapshot, verifyPoolUnchanged
+    └── proof-generators.js        # generateFakeCommitment, etc.
+```
+
+**Atomic Test Principles**:
+1. Each test file = one security property
+2. Each test creates fresh users (Keypair.generate())
+3. Tests share pool but query on-chain state for truth
+4. Root validation ensures local state matches blockchain
+5. No manual cross-test state accumulation
+
+**Why This Works**:
+- **Ethereum tests**: Circuit unit tests, isolated merkle trees per test
+- **Solana tests**: Integration tests, shared pool, validate roots against chain
+- **Root validation**: Bridges the gap, ensures local tracking accuracy
 
 ## Important Implementation Notes
 

@@ -106,8 +106,60 @@ async function generateMerkleProofs(deposits, depositIndex) {
     };
 }
 
+/**
+ * Validate that local merkle trees match on-chain roots
+ * This ensures our local commitment tracking is in sync with blockchain state
+ */
+async function validateTreeRoots(connection, poolStateAccount, localStateTree, localAspTree) {
+    const { parsePoolState } = require('./pool-parser');
+
+    // Fetch current pool state
+    const poolAccountInfo = await connection.getAccountInfo(poolStateAccount);
+    if (!poolAccountInfo) {
+        throw new Error('Pool state account not found');
+    }
+
+    const poolState = parsePoolState(poolAccountInfo.data);
+
+    // Convert on-chain roots to BigInt for comparison
+    let onchainStateRoot = BigInt(0);
+    for (let i = 0; i < 32; i++) {
+        onchainStateRoot = (onchainStateRoot << 8n) | BigInt(poolState.stateTree.root[i]);
+    }
+
+    let onchainAspRoot = BigInt(0);
+    for (let i = 0; i < 32; i++) {
+        onchainAspRoot = (onchainAspRoot << 8n) | BigInt(poolState.aspTree.root[i]);
+    }
+
+    // Compare roots
+    const stateRootMatch = localStateTree.root === onchainStateRoot;
+    const aspRootMatch = localAspTree.root === onchainAspRoot;
+
+    if (!stateRootMatch || !aspRootMatch) {
+        console.error('❌ Root mismatch detected!');
+        console.error(`  Local state root:  ${localStateTree.root.toString(16)}`);
+        console.error(`  Onchain state root: ${onchainStateRoot.toString(16)}`);
+        console.error(`  Local ASP root:  ${localAspTree.root.toString(16)}`);
+        console.error(`  Onchain ASP root: ${onchainAspRoot.toString(16)}`);
+        console.error(`  Local state size: ${localStateTree.size}, Onchain: ${poolState.stateTree.size}`);
+        console.error(`  Local ASP size: ${localAspTree.size}, Onchain: ${poolState.aspTree.size}`);
+        throw new Error('Local merkle tree roots do not match on-chain state');
+    }
+
+    console.log(`  ✓ Root validation passed (state=${localStateTree.size} leaves, asp=${localAspTree.size} labels)`);
+
+    return {
+        onchainStateSize: poolState.stateTree.size,
+        onchainAspSize: poolState.aspTree.size,
+        onchainStateDepth: poolState.stateTree.depth,
+        onchainAspDepth: poolState.aspTree.depth
+    };
+}
+
 module.exports = {
     buildMerkleTrees,
     generateMerkleProofs,
+    validateTreeRoots,
     FIELD_MODULUS
 };
