@@ -5,6 +5,7 @@
   "description": "Tests for Solana Privacy Pools",
   "scripts": {
     "test": "mocha privacy-pool.test.js",
+    "test:security": "mocha security/critical-security-tests.test.js",
     "test:validator": "../test-with-validator.sh"
   },
   "dependencies": {

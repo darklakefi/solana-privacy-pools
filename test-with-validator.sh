@@ -57,7 +57,13 @@ fi
 echo -e "\n${GREEN}Running test...${NC}\n"
 # Allow specifying which test to run via environment variable
 TEST_FILE=${TEST_FILE:-tests-package/privacy-pool.test.js}
-node "$TEST_FILE"
+
+# Check if test file ends with .test.js (Mocha test) or .js (standalone)
+if [[ "$TEST_FILE" == *.test.js ]]; then
+    cd tests-package && npx mocha "../$TEST_FILE"
+else
+    node "$TEST_FILE"
+fi
 
 TEST_EXIT_CODE=$?
 
