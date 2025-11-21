@@ -76,7 +76,6 @@ impl PoolStateLeanIMT {
     }
 
     pub fn insert_state_commitment(&mut self, commitment: [u8; 32]) -> Result<(), ProgramError> {
-        use core::ptr::addr_of_mut;
         use pinocchio_log::log;
 
         // Copy tree to work around packed struct issues

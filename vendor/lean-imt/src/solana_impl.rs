@@ -1,7 +1,3 @@
-// Solana-specific implementation of LeanIMT using [u8; 32] instead of String
-
-use pinocchio::syscalls::sol_poseidon;
-
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 

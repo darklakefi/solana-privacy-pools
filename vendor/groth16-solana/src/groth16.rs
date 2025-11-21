@@ -36,14 +36,6 @@ const ALT_BN128_ADD: u64 = 0;
 const ALT_BN128_MUL: u64 = 2;  
 const ALT_BN128_PAIRING: u64 = 3;
 
-// Little-endian flag
-const LE_FLAG: u64 = 0x80;
-
-// Little-endian versions  
-const ALT_BN128_ADD_LE: u64 = ALT_BN128_ADD | LE_FLAG;  // 0x80
-const ALT_BN128_MUL_LE: u64 = ALT_BN128_MUL | LE_FLAG;  // 0x82
-const ALT_BN128_PAIRING_LE: u64 = ALT_BN128_PAIRING | LE_FLAG;  // 0x83
-
 // Wrapper functions for BN254 operations (big-endian)
 fn alt_bn128_addition(input: &[u8]) -> Result<Vec<u8>, u64> {
     let mut result = vec![0u8; 64];
@@ -73,43 +65,6 @@ fn alt_bn128_pairing(input: &[u8]) -> Result<Vec<u8>, u64> {
     let mut result = vec![0u8; 32];
     let ret = unsafe {
         sol_alt_bn128_group_op(ALT_BN128_PAIRING, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
-    };
-    if ret == 0 {
-        Ok(result)
-    } else {
-        Err(ret)
-    }
-}
-
-// Wrapper functions for BN254 operations (little-endian)
-fn alt_bn128_addition_le(input: &[u8]) -> Result<Vec<u8>, u64> {
-    let mut result = vec![0u8; 64];
-    let ret = unsafe {
-        sol_alt_bn128_group_op(ALT_BN128_ADD_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
-    };
-    if ret == 0 {
-        Ok(result)
-    } else {
-        Err(ret)
-    }
-}
-
-fn alt_bn128_multiplication_le(input: &[u8]) -> Result<Vec<u8>, u64> {
-    let mut result = vec![0u8; 64];
-    let ret = unsafe {
-        sol_alt_bn128_group_op(ALT_BN128_MUL_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
-    };
-    if ret == 0 {
-        Ok(result)
-    } else {
-        Err(ret)
-    }
-}
-
-fn alt_bn128_pairing_le(input: &[u8]) -> Result<Vec<u8>, u64> {
-    let mut result = vec![0u8; 32];
-    let ret = unsafe {
-        sol_alt_bn128_group_op(ALT_BN128_PAIRING_LE, input.as_ptr(), input.len() as u64, result.as_mut_ptr())
     };
     if ret == 0 {
         Ok(result)

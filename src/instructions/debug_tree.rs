@@ -7,7 +7,6 @@ use pinocchio::{
 use pinocchio_log::log;
 
 use crate::state::lean_imt::LeanIMT;
-use crate::state::pool::PoolStateLeanIMT;
 
 /// Debug instruction specifically for testing LeanIMT insert and persistence
 pub fn debug_tree_insert(

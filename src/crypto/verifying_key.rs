@@ -126,7 +126,6 @@ pub const WITHDRAW_VERIFYINGKEY: Groth16Verifyingkey =  Groth16Verifyingkey {
 	]
 };
 // Verification functions
-use pinocchio::program_error::ProgramError;
 use groth16_solana::groth16::Groth16Verifier;
 use crate::instructions::types::{CommitmentProofData, WithdrawProofData};
 use pinocchio_log::log;
