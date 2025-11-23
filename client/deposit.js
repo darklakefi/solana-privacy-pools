@@ -11,6 +11,7 @@ const {
     TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
     createAssociatedTokenAccountInstruction,
+    createAssociatedTokenAccountIdempotentInstruction,
     createSyncNativeInstruction,
 } = require('@solana/spl-token');
 const { generateCommitmentProof, computeLabel, to32ByteBuffer } = require('./proof');
@@ -27,8 +28,8 @@ const {
  */
 async function createAndWrapWSol(connection, user, amount) {
     const userWsolAccount = await getAssociatedTokenAddress(WSOL_MINT, user.publicKey);
-    
-    const createUserWsolIx = createAssociatedTokenAccountInstruction(
+
+    const createUserWsolIx = createAssociatedTokenAccountIdempotentInstruction(
         user.publicKey,
         userWsolAccount,
         user.publicKey,

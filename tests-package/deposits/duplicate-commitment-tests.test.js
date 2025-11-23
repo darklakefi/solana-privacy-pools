@@ -93,23 +93,59 @@ describe('Duplicate Commitment Tests', function() {
         console.log('\n  ✓ State tree size unchanged (duplicate rejected)');
     });
 
-    it('should allow multiple different commitments conceptually', async function() {
-        console.log('\n  ✅ Test: Multiple Different Commitments (Conceptual)');
+    it('should allow multiple different commitments from same user', async function() {
+        console.log('\n  ✅ Test: Multiple Different Commitments from Same User');
 
-        console.log('\n  Each deposit generates unique commitment:');
-        console.log('  1. Random nullifier (32 bytes)');
-        console.log('  2. Random secret (32 bytes)');
-        console.log('  3. Same user can deposit multiple times');
-        console.log('  4. Each deposit creates unique commitment');
+        // Create user
+        const user = Keypair.generate();
+        await context.connection.requestAirdrop(user.publicKey, 100 * LAMPORTS_PER_SOL);
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        console.log('\n  Commitment uniqueness:');
-        console.log('  commitment₁ = H(nullifier₁, secret₁, value, label)');
-        console.log('  commitment₂ = H(nullifier₂, secret₂, value, label)');
-        console.log('  commitment₁ ≠ commitment₂ (different nullifier/secret)');
+        const depositAmount = BigInt(5 * LAMPORTS_PER_SOL);
 
-        console.log('\n  ✓ Multiple deposits from same user are supported');
-        console.log('  ✓ Each deposit uses fresh random values');
-        console.log('  ✓ Commitments are guaranteed unique');
+        // Get initial state
+        let poolAccountInfo = await context.connection.getAccountInfo(pool.poolStateAccount);
+        let poolState = parsePoolState(poolAccountInfo.data);
+        const initialSize = poolState.stateTree.size;
+
+        console.log(`  ✓ Initial state tree size: ${initialSize}`);
+
+        // Create first deposit (will use random nullifier/secret)
+        console.log('  ✓ Creating first deposit from user...');
+        const firstDeposit = await createDeposits(
+            context.connection,
+            pool.poolStateAccount,
+            [{ user, amount: depositAmount }],
+            pool.scope
+        );
+
+        const firstCommitment = firstDeposit[0].commitment;
+        console.log(`  ✓ First commitment: ${firstCommitment.toString('hex').slice(0, 16)}...`);
+
+        // Create second deposit (will use DIFFERENT random nullifier/secret)
+        console.log('  ✓ Creating second deposit from same user...');
+        const secondDeposit = await createDeposits(
+            context.connection,
+            pool.poolStateAccount,
+            [{ user, amount: depositAmount }],
+            pool.scope
+        );
+
+        const secondCommitment = secondDeposit[0].commitment;
+        console.log(`  ✓ Second commitment: ${secondCommitment.toString('hex').slice(0, 16)}...`);
+
+        // Verify commitments are different
+        expect(firstCommitment.toString('hex')).to.not.equal(secondCommitment.toString('hex'));
+        console.log('  ✓ Commitments are different (as expected)');
+
+        // Verify state tree grew by 2
+        poolAccountInfo = await context.connection.getAccountInfo(pool.poolStateAccount);
+        poolState = parsePoolState(poolAccountInfo.data);
+        const finalSize = poolState.stateTree.size;
+
+        expect(finalSize).to.equal(initialSize + 2);
+        console.log(`  ✓ State tree grew from ${initialSize} → ${finalSize}`);
+        console.log('  ✓ Same user can make multiple deposits with unique commitments');
     });
 
     it('should document commitment uniqueness guarantees', async function() {
