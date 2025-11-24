@@ -16,7 +16,8 @@ const programKeypair = Keypair.fromSecretKey(
 );
 
 // Account sizes
-const POOL_STATE_SIZE = 3616; // Vendored Lean IMT pool state size (with alignment)
+const POOL_STATE_SIZE = 3672; // Vendored Lean IMT pool state size (with alignment + fee fields)
+                              // Old: 3616, Added: 56 bytes (fee configuration)
 const DEPOSITOR_STATE_SIZE = 64;
 const NULLIFIER_STATE_SIZE = 33;
 
@@ -26,7 +27,8 @@ const INSTRUCTIONS = {
     DEPOSIT: 1,
     WITHDRAW: 2,
     RAGEQUIT: 3,
-    WIND_DOWN: 4
+    WIND_DOWN: 4,
+    WITHDRAW_FEES: 5
 };
 
 module.exports = {

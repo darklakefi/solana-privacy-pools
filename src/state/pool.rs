@@ -18,6 +18,14 @@ pub struct PoolStateLeanIMT {
     pub is_dead: u8,
     pub _padding2: [u8; 7],
 
+    /// Fee configuration
+    pub withdrawal_fee_basis_points: u16, // e.g., 30 = 0.3%
+    pub deposit_fee_basis_points: u16,    // e.g., 0 = 0% (typically zero)
+    pub _fee_padding1: [u8; 4],
+    pub withdrawal_fee_min: u64,          // Minimum fee in lamports
+    pub fee_collector: [u8; 32],          // Authority to collect fees
+    pub accumulated_fees: u64,            // Total fees accumulated
+
     /// Root history (circular buffer)
     pub roots: [[u8; 32]; ROOT_HISTORY_SIZE],
     pub current_root_index: u64,
@@ -51,6 +59,7 @@ impl PoolStateLeanIMT {
         entrypoint: Pubkey,
         withdrawal_verifier: Pubkey,
         scope: [u8; 32],
+        fee_collector: Option<Pubkey>,
     ) {
         self.is_initialized = 1;
         self._padding1 = [0u8; 7];
@@ -63,6 +72,17 @@ impl PoolStateLeanIMT {
         self.nonce = 0;
         self.is_dead = 0;
         self._padding2 = [0u8; 7];
+
+        // Initialize fee configuration
+        // Default: 0.3% withdrawal fee (30 basis points), 0% deposit fee
+        self.withdrawal_fee_basis_points = 30;
+        self.deposit_fee_basis_points = 0;
+        self._fee_padding1 = [0u8; 4];
+        self.withdrawal_fee_min = 0; // No minimum fee
+        // Fee collector defaults to pool authority if not specified
+        let fee_collector_key = fee_collector.unwrap_or(authority);
+        self.fee_collector.copy_from_slice(fee_collector_key.as_ref());
+        self.accumulated_fees = 0;
 
         // Initialize root history
         for i in 0..ROOT_HISTORY_SIZE {
@@ -172,5 +192,31 @@ impl PoolStateLeanIMT {
 
         log!("Nonce incremented from {} to {}", current_nonce, new_nonce);
         new_nonce
+    }
+
+    /// Calculate withdrawal fee based on configured basis points
+    /// Formula: fee = max(amount * basis_points / 10000, minimum_fee)
+    pub fn calculate_withdrawal_fee(&self, amount: u64) -> Result<u64, ProgramError> {
+        // Calculate basis point fee (amount * basis_points / 10000)
+        let basis_fee = (amount as u128)
+            .checked_mul(self.withdrawal_fee_basis_points as u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(10_000)
+            .ok_or(ProgramError::ArithmeticOverflow)? as u64;
+
+        // Return the maximum of basis_fee and minimum_fee
+        Ok(basis_fee.max(self.withdrawal_fee_min))
+    }
+
+    /// Calculate deposit fee based on configured basis points
+    pub fn calculate_deposit_fee(&self, amount: u64) -> Result<u64, ProgramError> {
+        // Calculate basis point fee (amount * basis_points / 10000)
+        let fee = (amount as u128)
+            .checked_mul(self.deposit_fee_basis_points as u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(10_000)
+            .ok_or(ProgramError::ArithmeticOverflow)? as u64;
+
+        Ok(fee)
     }
 }

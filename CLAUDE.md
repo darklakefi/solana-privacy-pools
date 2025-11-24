@@ -110,6 +110,66 @@ This generates a properly formatted `verifying_key.rs` file with the constants n
 
 ## Design Notes
 
+### Fee Collection System
+
+The protocol implements a fee collection mechanism matching Ethereum standards:
+
+**Fee Structure:**
+- **Withdrawal fees**: 0.3% (30 basis points) - matches Ethereum implementation
+- **Deposit fees**: 0% (no deposit fees)
+- **Minimum fee**: 0 lamports (no minimum)
+- **Fee collector**: Defaults to pool authority, configurable during initialization
+
+**Implementation Details:**
+- Fees are deducted from withdrawal amounts (users receive net amount after fee)
+- Fees accumulate in `pool_state.accumulated_fees` (u64 field)
+- Fee collector can withdraw accumulated fees via `WithdrawFees` instruction
+- Fee formula: `fee = max((amount * basis_points) / 10000, minimum_fee)`
+
+**State Structure Changes:**
+```rust
+// Added to PoolStateLeanIMT (56 bytes total)
+pub withdrawal_fee_basis_points: u16,  // 30 = 0.3%
+pub deposit_fee_basis_points: u16,     // 0 = 0%
+pub _fee_padding1: [u8; 4],
+pub withdrawal_fee_min: u64,           // 0 (no minimum)
+pub fee_collector: [u8; 32],           // Authority to collect fees
+pub accumulated_fees: u64,             // Total fees accumulated
+```
+
+**Breaking Change:**
+- Pool state size changed: 3616 → 3672 bytes
+- Existing pools cannot be used with updated program
+- Requires new pool deployment or data migration
+
+**Security Considerations:**
+- Only authorized fee collector can withdraw fees
+- Fee calculation uses checked arithmetic to prevent overflow
+- Accumulated fees tracked separately from pool liquidity
+- Withdrawal logic deducts fee before transfer (prevents over-withdrawal)
+
+**Testing:**
+- Fee calculation tests: `tests-package/fees/fee-calculation-tests.test.js`
+- Integration tests: `tests-package/fees/withdrawal-fee-deduction-tests.test.js`
+- Withdrawal instruction tests: `tests-package/fees/fee-withdrawal-tests.test.js`
+- Access control tests: `tests-package/fees/fee-access-control-tests.test.js`
+
+**Client SDK:**
+- `withdrawFees(connection, poolStateAccount, feeCollector, amount)` - Withdraw accumulated fees
+- `getAccumulatedFees(connection, poolStateAccount)` - Query fee information
+- `calculateWithdrawalFee(amount, basisPoints, minimumFee)` - Calculate expected fee
+
+**Example Usage:**
+```javascript
+// User withdraws 1 SOL
+const grossAmount = 1_000_000_000; // 1 SOL in lamports
+const fee = calculateWithdrawalFee(grossAmount, 30, 0);
+const netAmount = grossAmount - fee;
+
+// User receives: 997,000,000 lamports (0.997 SOL)
+// Pool retains: 3,000,000 lamports (0.003 SOL) as fees
+```
+
 ### Ragequit Design
 
 Ragequit is intentionally designed as a transparent emergency exit mechanism without ZK proofs. It allows users to withdraw funds by revealing their identity (linking to their depositor state), which is the intended trade-off for emergency situations.

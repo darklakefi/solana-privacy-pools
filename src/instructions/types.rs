@@ -22,6 +22,9 @@ pub enum PrivacyPoolInstruction {
         value: u64, // Amount to withdraw (no ZK proof needed for ragequit)
     },
     WindDown,
+    WithdrawFees {
+        amount: u64, // Amount of accumulated fees to withdraw
+    },
     TestPoseidon {
         left: [u8; 32],
         right: [u8; 32],
@@ -305,6 +308,17 @@ impl BorshDeserialize for PrivacyPoolInstruction {
             4 => {
                 // WindDown instruction - no additional data needed
                 Ok(PrivacyPoolInstruction::WindDown)
+            }
+            5 => {
+                // WithdrawFees instruction
+                if data.len() < 1 + 8 {
+                    return Err(ProgramError::InvalidInstructionData);
+                }
+                let amount = u64::from_le_bytes(
+                    <[u8; 8]>::try_from(&data[1..9])
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
+                );
+                Ok(PrivacyPoolInstruction::WithdrawFees { amount })
             }
             99 => {
                 // Test Poseidon instruction for debugging hash compatibility

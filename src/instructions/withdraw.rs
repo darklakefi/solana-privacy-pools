@@ -201,15 +201,32 @@ pub fn withdraw(
     
     // Insert new commitment into state tree
     pool_state.insert_state_commitment(proof_data.new_commitment_hash())?;
-    
-    // Transfer tokens from pool to user
-    let withdrawn_value = proof_data.withdrawn_value();
+
+    // Calculate withdrawal fee and net amount
+    let gross_amount = proof_data.withdrawn_value();
+    let fee = pool_state.calculate_withdrawal_fee(gross_amount)?;
+    let net_amount = gross_amount
+        .checked_sub(fee)
+        .ok_or(ProgramError::InsufficientFunds)?;
+
+    log!("Withdrawal breakdown:");
+    log!("  Gross amount: {}", gross_amount);
+    log!("  Fee ({}bp): {}", pool_state.withdrawal_fee_basis_points as u64, fee);
+    log!("  Net amount: {}", net_amount);
+
+    // Accumulate fee in pool state
+    pool_state.accumulated_fees = pool_state.accumulated_fees
+        .checked_add(fee)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+    log!("  Total accumulated fees: {}", pool_state.accumulated_fees);
+
+    // Transfer net amount (after fee) to withdrawer
     log!("Transferring tokens to withdrawer");
-    
+
     // Read decimals from the mint account
     let mint = unsafe { Mint::from_account_info_unchecked(mint_account)? };
     let decimals = mint.decimals();
-    
+
     // Use vault PDA seeds for signing (including bump)
     let bump_seed = [vault_bump];
     let seeds = [Seed::from(VAULT_PDA_SEED), Seed::from(&pool_state.asset_mint), Seed::from(&bump_seed)];
@@ -219,11 +236,11 @@ pub fn withdraw(
         to: user_token_account,
         mint: mint_account,
         authority: vault_account,
-        amount: withdrawn_value,
+        amount: net_amount,  // Transfer net amount, not gross
         decimals,
     }.invoke_signed(&[signer])?;
-    
-    log!("Withdrawal successful");
-    
+
+    log!("Withdrawal successful (fee deducted and accumulated)");
+
     Ok(())
 }

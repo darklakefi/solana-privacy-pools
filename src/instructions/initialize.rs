@@ -210,15 +210,19 @@ pub fn initialize_pool(
     
     // Initialize pool state
     log!("Initializing pool");
-    
+
+    // Fee collector defaults to authority if not specified
+    // In future, could add optional fee_collector parameter to instruction data
     pool_state.initialize(
         *authority.key(),
         asset_mint,
         entrypoint_authority,
         withdrawal_verifier,
         scope,
+        None, // fee_collector defaults to authority
     );
-    
+
     log!("Pool initialized successfully with Lean IMT");
+    log!("Fee configuration: {}bp withdrawal fee", pool_state.withdrawal_fee_basis_points as u64);
     Ok(())
 }

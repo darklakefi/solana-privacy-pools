@@ -8,6 +8,7 @@ pub mod test_poseidon;
 pub mod types;
 pub mod wind_down;
 pub mod withdraw;
+pub mod withdraw_fees;
 
 pub use types::*;
 
@@ -47,6 +48,10 @@ pub fn process_instruction(
         }
 
         PrivacyPoolInstruction::WindDown => wind_down::wind_down(program_id, accounts),
+
+        PrivacyPoolInstruction::WithdrawFees { amount } => {
+            withdraw_fees::withdraw_fees(program_id, accounts, amount)
+        }
 
         PrivacyPoolInstruction::TestPoseidon { left, right } => {
             test_poseidon::test_poseidon(left, right)

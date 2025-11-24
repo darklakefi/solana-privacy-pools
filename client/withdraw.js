@@ -303,13 +303,198 @@ async function withdrawSimple(
   );
 
   return {
-    txSig,
+    signature: txSig,
+    recipientTokenAccount: userTokenAccount,
     nullifierState: nullifierPDA,
     nullifierHash: publicSignals[1], // Nullifier hash from proof
     newCommitment: publicSignals[0], // New commitment for change
   };
 }
 
+/**
+ * Withdraw with a separate recipient (for privacy-preserving withdrawals)
+ *
+ * @param {Connection} connection - Solana connection
+ * @param {PublicKey} poolStateAccount - Pool state account
+ * @param {Object} depositInfo - Deposit information
+ * @param {Array} allDeposits - All deposits for merkle tree
+ * @param {bigint} withdrawAmount - Amount to withdraw
+ * @param {PublicKey} recipient - Recipient public key (NOT the depositor)
+ * @param {Buffer} scope - Pool scope
+ * @param {PublicKey} mint - Token mint
+ * @param {Keypair} processor - Transaction processor/signer (pays fees, not the depositor)
+ */
+async function withdraw(
+  connection,
+  poolStateAccount,
+  depositInfo,
+  allDeposits,
+  withdrawAmount,
+  recipient,
+  scope,
+  mint,
+  processor = null
+) {
+  // If no processor specified, create a new keypair (caller must fund it)
+  const processorKeypair = processor || Keypair.generate();
+
+  // Get pool state
+  const poolAccountInfo = await connection.getAccountInfo(poolStateAccount);
+  const poolState = parsePoolState(poolAccountInfo.data);
+
+  // Find deposit index
+  const depositIndex = allDeposits.findIndex((d) => {
+    const dCommit = Buffer.isBuffer(d.commitment)
+      ? d.commitment
+      : Buffer.from(d.commitment);
+    const infoCommit = Buffer.isBuffer(depositInfo.commitment)
+      ? depositInfo.commitment
+      : Buffer.from(depositInfo.commitment);
+    return dCommit.toString("hex") === infoCommit.toString("hex");
+  });
+
+  if (depositIndex === -1) {
+    throw new Error("Deposit not found in deposits array");
+  }
+
+  // Generate merkle proofs
+  const merkleProofs = await generateMerkleProofs(allDeposits, depositIndex);
+
+  // Get state root from pool
+  const stateRootFromPool = poolState.stateTree.root;
+  const stateRootFromPoolBigInt = stateRootFromPool.reduce(
+    (acc, byte, i) => acc | (BigInt(byte) << BigInt(8 * (31 - i))),
+    BigInt(0)
+  );
+
+  // Compute context
+  const scopeBuffer = Buffer.isBuffer(scope) ? scope : Buffer.from(scope);
+  const contextData = Buffer.concat([
+    Buffer.from("IPrivacyPool.Withdrawal"),
+    scopeBuffer
+  ]);
+  const contextHash = Buffer.from(keccak256.array(contextData));
+  const contextReduced = reduceHashToField(contextHash);
+
+  // Get vault PDA
+  const { vaultPDA } = getVaultPDA(mint);
+
+  // Get token accounts
+  const recipientTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    recipient
+  );
+  const poolTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    vaultPDA,
+    true
+  );
+
+  // Generate new nullifier and secret for change commitment
+  const newNullifier = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
+  const newSecret = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
+
+  // Generate withdraw proof
+  const { proof, publicSignals } = await generateWithdrawProof(
+    withdrawAmount,
+    stateRootFromPoolBigInt,
+    merkleProofs.stateTreeDepth,
+    merkleProofs.aspRoot,
+    merkleProofs.aspTreeDepth,
+    contextReduced,
+    depositInfo.label,
+    depositInfo.value,
+    depositInfo.nullifier,
+    depositInfo.secret,
+    newNullifier,
+    newSecret,
+    merkleProofs.stateProof,
+    merkleProofs.stateIndex,
+    merkleProofs.aspProof,
+    merkleProofs.aspIndex
+  );
+
+  // Get nullifier PDA
+  const { nullifierPDA } = getNullifierPDA(depositInfo.nullifierHash);
+
+  // Build instruction data
+  const withdrawalDataBytes = Buffer.alloc(8);
+  withdrawalDataBytes.writeBigUInt64LE(withdrawAmount, 0);
+
+  const totalSize = 1 + 32 + 4 + withdrawalDataBytes.length + 64 + 128 + 64 + 4 + (8 * 32);
+  const withdrawData = Buffer.alloc(totalSize);
+  let offset = 0;
+
+  withdrawData[offset++] = INSTRUCTIONS.WITHDRAW;
+  withdrawData.set(processorKeypair.publicKey.toBuffer(), offset);
+  offset += 32;
+  withdrawData.writeUInt32LE(withdrawalDataBytes.length, offset);
+  offset += 4;
+  withdrawData.set(withdrawalDataBytes, offset);
+  offset += withdrawalDataBytes.length;
+  withdrawData.set(proof.proofA, offset);
+  offset += 64;
+  withdrawData.set(proof.proofB, offset);
+  offset += 128;
+  withdrawData.set(proof.proofC, offset);
+  offset += 64;
+  withdrawData.writeUInt32LE(8, offset);
+  offset += 4;
+  for (const signal of publicSignals) {
+    withdrawData.set(signal, offset);
+    offset += 32;
+  }
+
+  // Build transaction
+  const {
+    createAssociatedTokenAccountIdempotentInstruction
+  } = require('@solana/spl-token');
+
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    processorKeypair.publicKey,
+    recipientTokenAccount,
+    recipient,
+    mint
+  );
+
+  const withdrawIx = new TransactionInstruction({
+    keys: [
+      { pubkey: poolStateAccount, isSigner: false, isWritable: true },
+      { pubkey: vaultPDA, isSigner: false, isWritable: false },
+      { pubkey: nullifierPDA, isSigner: false, isWritable: true },
+      { pubkey: processorKeypair.publicKey, isSigner: true, isWritable: true },
+      { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: recipientTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    programId: programKeypair.publicKey,
+    data: withdrawData,
+  });
+
+  const withdrawTx = new Transaction()
+    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+    .add(createAtaIx)
+    .add(withdrawIx);
+
+  const txSig = await sendAndConfirmTransaction(
+    connection,
+    withdrawTx,
+    [processorKeypair],
+    { commitment: "confirmed" }
+  );
+
+  return {
+    signature: txSig,
+    recipientTokenAccount,
+    nullifierState: nullifierPDA,
+    nullifierHash: publicSignals[1],
+    newCommitment: publicSignals[0],
+  };
+}
+
 module.exports = {
   withdrawSimple,
+  withdraw,
 };
