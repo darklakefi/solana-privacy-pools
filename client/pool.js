@@ -36,6 +36,27 @@ function getVaultPDA(mint) {
 }
 
 /**
+ * Get the canonical spent-nullifier marker PDA for a pool and nullifier hash.
+ */
+function getNullifierPDA(poolStateAccount, nullifierHash) {
+    const hashBuffer = Buffer.from(nullifierHash);
+    if (hashBuffer.length !== 32) {
+        throw new TypeError('nullifierHash must be exactly 32 bytes');
+    }
+
+    const [nullifierPDA, nullifierBump] = PublicKey.findProgramAddressSync(
+        [
+            Buffer.from('nullifier'),
+            poolStateAccount.toBuffer(),
+            hashBuffer,
+        ],
+        programKeypair.publicKey
+    );
+
+    return { nullifierPDA, nullifierBump };
+}
+
+/**
  * Get the pool state account seed
  */
 function getPoolStateSeed(mint) {
@@ -161,6 +182,7 @@ async function windDownPool(connection, poolStateAccount, authority) {
 
 module.exports = {
     getVaultPDA,
+    getNullifierPDA,
     getPoolStateSeed,
     initializePool,
     parsePoolState,

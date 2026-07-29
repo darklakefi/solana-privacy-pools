@@ -24,12 +24,12 @@ pub fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     use pinocchio_log::log;
-    
+
     log!("process_instruction: instruction_data.len() = {}", instruction_data.len() as u64);
-    
+
     let instruction = PrivacyPoolInstruction::try_from_slice(instruction_data)?;
     log!("process_instruction: instruction parsed successfully");
-    
+
     instructions::process_instruction(instruction, program_id, accounts)
 }
 
@@ -49,6 +49,8 @@ pub trait BorshDeserialize {
 
 /// Constants from the Solidity contract
 pub mod constants {
+    use pinocchio::pubkey::Pubkey;
+
     // SNARK scalar field is too large for u64, represented as bytes
     pub const SNARK_SCALAR_FIELD_BYTES: [u8; 32] = [
         0x01, 0x00, 0x00, 0xf0, 0x93, 0xf5, 0xe1, 0x43, 0x91, 0x70, 0xb9, 0x79, 0x48, 0xe8, 0x33, 0x28,
@@ -56,7 +58,13 @@ pub mod constants {
     ];
     pub const MAX_TREE_DEPTH: u8 = 32;
     pub const ROOT_HISTORY_SIZE: usize = 64;
-    
+
     /// PDA seed for vault accounts (token authority)
     pub const VAULT_PDA_SEED: &[u8] = b"vault";
+
+    /// PDA seed for spent-nullifier marker accounts.
+    pub const NULLIFIER_PDA_SEED: &[u8] = b"nullifier";
+
+    /// Native system program address.
+    pub const SYSTEM_PROGRAM_ID: Pubkey = [0u8; 32];
 }

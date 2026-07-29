@@ -16,7 +16,7 @@ fi
 
 # Step 2: Build Solana program
 echo -e "${YELLOW}Building Solana program...${NC}"
-cargo build-sbf --release
+cargo build-sbf
 
 echo -e "${GREEN}Build complete!${NC}"
 echo "Deploy with:"

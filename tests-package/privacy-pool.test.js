@@ -1,12 +1,23 @@
 // Refactored test using the consolidated library
+const assert = require('node:assert/strict');
 const { 
     Connection,
+    ComputeBudgetProgram,
     Keypair,
     LAMPORTS_PER_SOL,
+    SystemProgram,
+    Transaction,
+    TransactionInstruction,
+    sendAndConfirmTransaction,
 } = require('@solana/web3.js');
-const { getAccount, getAssociatedTokenAddress } = require('@solana/spl-token');
+const {
+    TOKEN_PROGRAM_ID,
+    getAccount,
+    getAssociatedTokenAddress,
+} = require('@solana/spl-token');
 const {
     // Constants
+    INSTRUCTIONS,
     WSOL_MINT,
     programKeypair,
     
@@ -14,6 +25,7 @@ const {
     initializePool,
     parsePoolState,
     windDownPool,
+    getNullifierPDA,
     getVaultPDA,
     
     // Deposit operations
@@ -28,6 +40,73 @@ const {
 
 console.log('=== Privacy Pool Test with Library ===');
 console.log('Program ID:', programKeypair.publicKey.toBase58());
+
+function buildNullifierReplayProbe({
+    poolStateAccount,
+    vaultPDA,
+    nullifierAccount,
+    user,
+    poolTokenAccount,
+    userTokenAccount,
+    mint,
+    nullifierHash,
+}) {
+    const withdrawalData = Buffer.alloc(8);
+    const publicSignalsCount = 8;
+    const instructionData = Buffer.alloc(
+        1 + 32 + 4 + withdrawalData.length + 64 + 128 + 64 + 4
+        + publicSignalsCount * 32
+    );
+    let offset = 0;
+
+    instructionData[offset++] = INSTRUCTIONS.WITHDRAW;
+    user.publicKey.toBuffer().copy(instructionData, offset);
+    offset += 32;
+    instructionData.writeUInt32LE(withdrawalData.length, offset);
+    offset += 4;
+    withdrawalData.copy(instructionData, offset);
+    offset += withdrawalData.length;
+
+    // Leave the proof bytes zeroed: the program must reject the nullifier
+    // account before attempting proof verification.
+    offset += 64 + 128 + 64;
+    instructionData.writeUInt32LE(publicSignalsCount, offset);
+    offset += 4;
+    Buffer.from(nullifierHash).copy(instructionData, offset + 32);
+
+    return new TransactionInstruction({
+        keys: [
+            { pubkey: poolStateAccount, isSigner: false, isWritable: true },
+            { pubkey: vaultPDA, isSigner: false, isWritable: false },
+            { pubkey: nullifierAccount, isSigner: false, isWritable: true },
+            { pubkey: user.publicKey, isSigner: true, isWritable: true },
+            { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: userTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: mint, isSigner: false, isWritable: false },
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        programId: programKeypair.publicKey,
+        data: instructionData,
+    });
+}
+
+async function expectProgramRejection(promise, expectedLog) {
+    try {
+        await promise;
+        assert.fail(`Expected transaction rejection containing "${expectedLog}"`);
+    } catch (error) {
+        if (error instanceof assert.AssertionError) {
+            throw error;
+        }
+
+        const details = [
+            error instanceof Error ? error.message : String(error),
+            ...(error.logs || []),
+        ].join('\n');
+        assert.match(details, new RegExp(expectedLog));
+    }
+}
 
 async function main() {
     // Connect to local validator
@@ -133,9 +212,82 @@ async function main() {
         );
         console.log('  ✅ User 2 withdrew successfully with ZK proof');
         console.log(`     Nullifier: ${Buffer.from(withdrawResult.nullifierHash).toString('hex').slice(0, 16)}...`);
+
+        const { nullifierPDA } = getNullifierPDA(
+            poolStateAccount,
+            withdrawResult.nullifierHash
+        );
+        assert.equal(
+            withdrawResult.nullifierState.toBase58(),
+            nullifierPDA.toBase58(),
+            'client must return the canonical nullifier PDA'
+        );
+
+        const nullifierAccountInfo = await connection.getAccountInfo(nullifierPDA);
+        assert.ok(nullifierAccountInfo, 'nullifier marker account must exist');
+        assert.equal(
+            nullifierAccountInfo.owner.toBase58(),
+            programKeypair.publicKey.toBase58(),
+            'nullifier marker must be program owned'
+        );
+        assert.equal(nullifierAccountInfo.data[0], 1, 'nullifier marker must be spent');
+        assert.deepEqual(
+            nullifierAccountInfo.data.subarray(1),
+            Buffer.from(withdrawResult.nullifierHash),
+            'nullifier marker must contain the proof nullifier hash'
+        );
+
+        const user2WsolAddress = await getAssociatedTokenAddress(
+            WSOL_MINT,
+            user2.publicKey
+        );
+        const rogueNullifier = Keypair.generate().publicKey;
+        const rogueProbe = buildNullifierReplayProbe({
+            poolStateAccount,
+            vaultPDA,
+            nullifierAccount: rogueNullifier,
+            user: user2,
+            poolTokenAccount,
+            userTokenAccount: user2WsolAddress,
+            mint: WSOL_MINT,
+            nullifierHash: withdrawResult.nullifierHash,
+        });
+        await expectProgramRejection(
+            sendAndConfirmTransaction(
+                connection,
+                new Transaction()
+                    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+                    .add(rogueProbe),
+                [user2],
+                { commitment: 'confirmed' }
+            ),
+            'Invalid nullifier account'
+        );
+
+        const replayProbe = buildNullifierReplayProbe({
+            poolStateAccount,
+            vaultPDA,
+            nullifierAccount: nullifierPDA,
+            user: user2,
+            poolTokenAccount,
+            userTokenAccount: user2WsolAddress,
+            mint: WSOL_MINT,
+            nullifierHash: withdrawResult.nullifierHash,
+        });
+        await expectProgramRejection(
+            sendAndConfirmTransaction(
+                connection,
+                new Transaction()
+                    .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+                    .add(replayProbe),
+                [user2],
+                { commitment: 'confirmed' }
+            ),
+            'Nullifier already spent'
+        );
+        console.log('  ✅ Nullifier PDA rejects arbitrary-account bypasses and replays');
         
         // Check balance
-        const user2WsolAddress = await getAssociatedTokenAddress(WSOL_MINT, user2.publicKey);
         const user2WsolAccount = await getAccount(connection, user2WsolAddress);
         console.log(`     User 2 received: ${user2WsolAccount.amount / BigInt(LAMPORTS_PER_SOL)} WSOL`);
     } catch (error) {
@@ -143,6 +295,7 @@ async function main() {
         if (error.logs) {
             console.log('     Logs:', error.logs.slice(-5).join('\n     '));
         }
+        throw error;
     }
     
     // Test wind down and ragequit

@@ -1,5 +1,4 @@
 const {
-  Keypair,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -11,13 +10,12 @@ const {
   getAssociatedTokenAddress,
 } = require("@solana/spl-token");
 const { generateWithdrawProof } = require("./proof");
-const { getVaultPDA } = require("./pool");
+const { getNullifierPDA, getVaultPDA } = require("./pool");
 const { generateMerkleProofs } = require("./merkle");
 const { parsePoolState } = require("./pool-parser");
 const { keccak256 } = require("js-sha3");
 const {
   programKeypair,
-  NULLIFIER_STATE_SIZE,
   INSTRUCTIONS,
   WSOL_MINT,
 } = require("./constants");
@@ -197,18 +195,12 @@ async function withdrawSimple(
     merkleProofs.aspIndex,
   );
 
-  // Create nullifier state account
-  const nullifierState = Keypair.generate();
-  const nullifierRent =
-    await connection.getMinimumBalanceForRentExemption(NULLIFIER_STATE_SIZE);
-
-  const createNullifierAccountIx = SystemProgram.createAccount({
-    fromPubkey: user.publicKey,
-    newAccountPubkey: nullifierState.publicKey,
-    space: NULLIFIER_STATE_SIZE,
-    lamports: Number(nullifierRent),
-    programId: programKeypair.publicKey,
-  });
+  // The program creates this canonical PDA after validating the proof. Reusing
+  // the same nullifier resolves to the same account and is therefore rejected.
+  const { nullifierPDA: nullifierState } = getNullifierPDA(
+    poolStateAccount,
+    publicSignals[1],
+  );
 
   // Build withdraw instruction data matching Rust parser expectations:
   // 1 byte: instruction type
@@ -265,12 +257,13 @@ async function withdrawSimple(
     keys: [
       { pubkey: poolStateAccount, isSigner: false, isWritable: true },
       { pubkey: vaultPDA, isSigner: false, isWritable: false },
-      { pubkey: nullifierState.publicKey, isSigner: false, isWritable: true },
-      { pubkey: user.publicKey, isSigner: true, isWritable: false },
+      { pubkey: nullifierState, isSigner: false, isWritable: true },
+      { pubkey: user.publicKey, isSigner: true, isWritable: true },
       { pubkey: poolTokenAccount, isSigner: false, isWritable: true },
       { pubkey: userTokenAccount, isSigner: false, isWritable: true },
       { pubkey: mint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     programId: programKeypair.publicKey,
     data: withdrawData,
@@ -278,19 +271,18 @@ async function withdrawSimple(
 
   const withdrawTx = new Transaction()
     .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-    .add(createNullifierAccountIx)
     .add(withdrawIx);
 
   const txSig = await sendAndConfirmTransaction(
     connection,
     withdrawTx,
-    [user, nullifierState],
+    [user],
     { commitment: "confirmed" },
   );
 
   return {
     txSig,
-    nullifierState: nullifierState.publicKey,
+    nullifierState,
     nullifierHash: publicSignals[1], // Nullifier hash from proof
     newCommitment: publicSignals[0], // New commitment for change
   };
